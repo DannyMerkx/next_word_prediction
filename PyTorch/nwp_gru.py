@@ -33,11 +33,13 @@ parser.add_argument('-dict_loc', type = str, default = '/data/next_word_predicti
                     help = 'location of the dictionary containing the mapping between the vocabulary and the embedding indices')
 # args concerning training settings
 parser.add_argument('-batch_size', type = int, default = 128, help = 'batch size, default: 128')
-parser.add_argument('-lr', type = float, default = 0.0001, help = 'learning rate, default:0.0001')
-parser.add_argument('-n_epochs', type = int, default = 32, help = 'number of training epochs, default: 32')
+parser.add_argument('-lr', type = float, default = 0.5, help = 'learning rate, default:0.0001')
+parser.add_argument('-n_epochs', type = int, default = 8, help = 'number of training epochs, default: 32')
 parser.add_argument('-cuda', type = bool, default = True, help = 'use cuda (gpu), default: True')
+parser.add_argument('-save_states', type = list, default = [1000, 3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 6470000], 
+                    help = 'points in training where the model parameters are saved')
 # args concerning the database and which features to load
-parser.add_argument('-gradient_clipping', type = bool, default = False, help ='use gradient clipping, default: True')
+parser.add_argument('-gradient_clipping', type = bool, default = True, help ='use gradient clipping, default: True')
 
 args = parser.parse_args()
 
@@ -66,10 +68,11 @@ def load(folder, file_name):
     return line  
     
 train = load(args.data_loc, 'train_nwp.txt')
+print('#training samples: ' + str(len(train)))
 # set some part of the dataset apart for validation and testing
-val = train[-700000:-350000]
-test = train[-350000:]
-train = train[:-700000]
+#val = train[-700000:-350000]
+#test = train[-350000:]
+#train = train[:-700000]
 ############################### Neural network setup #################################################
 # create the network and initialise the parameters to be xavier uniform distributed
 nwp_model = nwp_rnn_encoder(config)
@@ -77,13 +80,16 @@ for p in nwp_model.parameters():
     if p.dim() > 1:
         torch.nn.init.xavier_uniform_(p)
 
+model_parameters = filter(lambda p: p.requires_grad, nwp_model.parameters())
+print('#model parameters: ' + str(sum([np.prod(p.size()) for p in model_parameters])))
+
 # Adam optimiser. I found SGD to work terribly and could not find appropriate parameter settings for it.
-optimizer = torch.optim.Adam(nwp_model.parameters(), 1)
+optimizer = torch.optim.SGD(nwp_model.parameters(), lr = args.lr, momentum = 0.9)
 
 #plateau_scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode = 'min', factor = 0.2, patience = 0, 
 #                                                   threshold = 0.0001, min_lr = 1e-5, cooldown = 0)
-
-#step_scheduler = lr_scheduler.StepLR(optimizer, 1000, gamma=0.1, last_epoch=-1)
+step_size = int(len(train)/3)
+step_scheduler = lr_scheduler.StepLR(optimizer, step_size, gamma=0.5, last_epoch=-1)
 
 # cyclic scheduler which varies the learning rate between a min and max over a certain number of epochs
 # according to a cosine function 
@@ -95,7 +101,7 @@ def create_cyclic_scheduler(max_lr, min_lr, stepsize):
     # min and max lr   
     return(cyclic_scheduler)
 
-cyclic_scheduler = create_cyclic_scheduler(max_lr = args.lr, min_lr = args.lr * 0.2, stepsize = int(len(train)/args.batch_size)*4)
+#cyclic_scheduler = create_cyclic_scheduler(max_lr = args.lr, min_lr = args.lr * 0.2, stepsize = int(len(train)/args.batch_size)*4)
 
 # create a trainer setting the loss function, optimizer, minibatcher, lr_scheduler and the r@n evaluator
 trainer = nwp_trainer(nwp_model)
@@ -111,19 +117,13 @@ if cuda:
 
 # gradient clipping can help stabilise training in the first epoch.
 if args.gradient_clipping:
-    trainer.set_gradient_clipping(0.05)
+    trainer.set_gradient_clipping(0.25)
 
 ################################# training/test loop #####################################=
 # run the training loop for the indicated amount of epochs 
 while trainer.epoch <= args.n_epochs:
     # Train on the train set    
-    trainer.train_epoch(train, args.batch_size)
-    #evaluate on the validation set
-    trainer.test_epoch(val, args.batch_size)
-    # save network parameters
-    trainer.save_params(args.results_loc)  
-    # print some info about this epoch
-    trainer.report(args.n_epochs)   
+    trainer.train_epoch(train, args.batch_size, args.results_loc, arg.save_states)
 
     if args.gradient_clipping:
         # I found that updating the clip value at each epoch did not work well     
@@ -131,10 +131,6 @@ while trainer.epoch <= args.n_epochs:
         trainer.reset_grads()
     #increase epoch#
     trainer.update_epoch()
-
-# evaluate on the test set. 
-trainer.test_epoch(test, args.batch_size)
-trainer.print_test_loss()
 
 # save the gradients for each epoch, can be usefull to select an initial clipping value.
 if args.gradient_clipping:

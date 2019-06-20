@@ -102,7 +102,7 @@ class nwp_transformer(transformer):
         self.is_cuda = config['cuda']
         self.max_len = tf['max_len']
         # create the embedding layer
-        self.embed = nn.Embedding(num_embeddings = embed['num_embeddins'], 
+        self.embed = nn.Embedding(num_embeddings = embed['num_embeddings'], 
                                   embedding_dim = embed['embedding_dim'], sparse = embed['sparse'],
                                   padding_idx = embed['padding_idx'])
         # create the positional embeddings
@@ -112,7 +112,8 @@ class nwp_transformer(transformer):
                               n_layers = tf['n_layers'], h = tf['h'])
         # linear layer maps to the output dictionary
         self.linear = nn.Linear(tf['input_size'], embed['num_embeddings'])
-    def forward(self, input):
+    # l is included as a dummy to keep all code compatible with both Transformers and RNNs (which need the length of the unpadded sentences)
+    def forward(self, input, l = False):
         # encode the sentence using the transformer. encoder_only uses the encoder part only but
         # with a decoder mask (which prevents peeking at future timesteps)
         out, targs = self.encoder_only(input)

@@ -14,14 +14,15 @@ import torch
 import os
 import time
 import pickle
+import numpy as np 
 
 # trainer for the flickr database. 
 class nwp_trainer():
-    def __init__(self, transformer):
+    def __init__(self, encoder):
         # default datatype, change to cuda by calling set_cuda
         self.dtype = torch.FloatTensor
         # set the transformer. Set an empty scheduler to keep this optional.
-        self.transformer = transformer
+        self.encoder = encoder
         self.scheduler = False
         # set gradient clipping to false by default
         self.grad_clipping = False
@@ -60,7 +61,7 @@ class nwp_trainer():
     # set data type and the network to cuda
     def set_cuda(self):
         self.dtype = torch.cuda.FloatTensor
-        self.transformer.cuda()
+        self.encoder.cuda()
     # manually set the epoch to some number e.g. if continuing training from a 
     # pretrained model
     def set_epoch(self, epoch):
@@ -68,37 +69,37 @@ class nwp_trainer():
     def update_epoch(self):
         self.epoch += 1
     # functions to set new embedders
-    def set_transformer(self, emb):
-        self.transformer = emb
+    def set_encoder(self, emb):
+        self.encoder = emb
     # functions to load a pretrained embedder
-    def load_transformer(self, loc):
-        tf_state = torch.load(loc)
-        self.transformer.load_state_dict(tf_state)
+    def load_encoder(self, loc):
+        enc_state = torch.load(loc)
+        self.encoder.load_state_dict(enc_state)
     # optionally load glove embeddings for token based embedders with load_embeddings
     # function implemented.
     def load_glove_embeddings(self, glove_loc):
-        self.transformer.load_embeddings(self.dict_loc, glove_loc)
+        self.encoder.load_embeddings(self.dict_loc, glove_loc)
 
 ################## functions to perform training and testing ##################
         
 # during training the model expects aligned input from both languages. The model
 # outputs predictions (next word probabilities for each position) and targets for the loss function
 # (the decoder input shifted to the left)
-    def train_epoch(self, sents, batch_size):
+    def train_epoch(self, sents, batch_size, save_states, save_loc):
         print('training epoch: ' + str(self.epoch))
         # keep track of runtime
         self.start_time = time.time()
-        self.transformer.train()
+        self.encoder.train()
         # for keeping track of the average loss over all batches
         self.train_loss = 0
         num_batches = 0
         for batch in self.batcher(sents, batch_size, 
-                                  self.transformer.max_len, shuffle = True):
+                                  self.encoder.max_len, shuffle = True):
             # retrieve a minibatch from the batcher
-            enc_input = batch
+            enc_input, lengths = batch
             num_batches +=1
             # embed the images and audio using the network
-            preds, targs = self.encode(enc_input)
+            preds, targs = self.encode(enc_input, lengths)
             # calculate the loss            
             loss = self.loss(preds.view(-1, preds.size(-1)), targs.view(-1))
             # reset the gradients of the optimiser
@@ -107,53 +108,56 @@ class nwp_trainer():
             loss.backward()
             # clip the gradients if required
             if self.grad_clipping:
-                torch.nn.utils.clip_grad_norm(self.transformer.parameters(), self.tf_clipper.clip)
+                torch.nn.utils.clip_grad_norm(self.encoder.parameters(), self.tf_clipper.clip)
             # update weights
             self.optimizer.step()
             # add loss to average
             self.train_loss += loss.data
             # print loss every n batches
-            if num_batches%1000 == 0:
-                print(self.train_loss.cpu()[0].data.numpy()/num_batches)
+            if num_batches in save_states:
+                print(' '.join('loss after', str(num_batches), 'steps:', str(self.train_loss.cpu().data.numpy()/num_batches)))
+                self.save_params(save_loc, num_batches)
             # if there is a cyclic lr scheduler, take a step in the scheduler
             if self.scheduler == 'cyclic':
                 self.lr_scheduler.step()
                 self.iteration +=1     
         # print the average loss for the current epoch
-        self.train_loss = self.train_loss.cpu()[0].data.numpy()/num_batches
+        self.train_loss = self.train_loss.cpu().data.numpy()/num_batches
 # during testing the model takes encoder input and translates the sentence into 
 # the target language without looking at the decoder input. decoder input is therefore
 # optional. If it is passed, this is just used to create the gold label targets for calculating 
 # the test loss.
     def test_epoch(self, sents, batch_size, beam_width = 1):
         # set to evaluation mode (disable dropout etc.)
-        self.transformer.eval()
+        self.encoder.eval()
         # for keeping track of the average loss
         self.test_loss = 0
         test_batches = 0
         for batch in self.batcher(sents, batch_size,
-                                  self.transformer.max_len, shuffle = False):
+                                  self.encoder.max_len, shuffle = False):
             # retrieve a minibatch from the batcher
-            enc_input = batch
+            enc_input, lengths = batch
             test_batches += 1      
             # translate the sentences and return the candidate translation, prediction probabilities and targets
-            preds, targs = self.encode(enc_input)
+            preds, targs = self.encode(enc_input, lengths)
             # calculate the cross entropy loss
             loss = self.loss(preds.view(-1, preds.size(-1)), targs.view(-1))
             # add loss to average
             self.test_loss += loss.data 
-        self.test_loss = self.test_loss.cpu()[0].data.numpy()/test_batches
+        self.test_loss = self.test_loss.cpu().data.numpy()/test_batches
         # take a step for a plateau lr scheduler                
         if self.scheduler == 'plateau':
             self.lr_scheduler.step(self.test_loss)
     # embed a batch of images and captions
-    def encode(self, enc):  
+    def encode(self, enc, l):  
+	# sort the minibatch by length
+        enc = enc[np.argsort(- np.array(l))]
+        l = np.array(l)[np.argsort(- np.array(l))] 
         # convert data to pytorch variables
         enc = self.dtype(enc)    
         # call the transformer's forward function
-        preds, targs = self.transformer(enc)
+        preds, targs = self.encoder(enc, l)
         return preds, targs
-
 
 ######################## evaluation functions #################################
     # report on the time this epoch took and the train and test loss
@@ -171,38 +175,18 @@ class nwp_trainer():
     def print_validation_loss(self):
         print("validation loss:\t\t{:.6f}".format(self.test_loss))
     # function to save parameters in a results folder
-    def save_params(self, loc):
-        torch.save(self.transformer.state_dict(), os.path.join(loc, 'transformer_model' + '.' +str(self.epoch)))
-    # print the original encoder and decoder input and the final predictions
-    # n.b. the id2char (for character based models) is very much hard coded to my
-    # specific preprocessing pipeline, character ids might not align with different datasets
-    def id2char(self, enc, dec, preds):
-        chars = ['','Ä','Ë','Ü','Ö','ä','ë','ü','ö','ß'] + list(string.printable)[:95] + ['<bos>', '<eos>'] 
-        print(''.join(chars[int(x)] for x in enc))
-        print(''.join(chars[int(x)] for x in dec))
-        inds = preds.max(-1)[1].cpu().numpy()
-        print(''.join(chars[int(x)] for x in inds))
-    # id2token (for token based models) should work for any dataset given the dictionary
-    # used during training
-    def id2token(self, enc, dec, preds):
-        with open(self.dict_loc + '.pkl', 'rb') as f:
-            id_dict = pickle.load(f)
-        id_dict = {id_dict[x]: x for x in id_dict}
-        id_dict[0] = ''
-        print(''.join([id_dict[int(x)] for x in enc]))
-        print(''.join([id_dict[int(x)] for x in dec]))
-        inds = preds.max(-1)[1].cpu().numpy()
-        print(''.join([id_dict[int(x)] for x in inds]))
+    def save_params(self, loc, num_batches):
+        torch.save(self.encoder.state_dict(), os.path.join(loc, '_'.join('nwp_model', str(self.epoch), str(num_batches))))
 ############ functions to deal with the trainer's gradient clipper ############
     # create a gradient tracker/clipper
     def set_gradient_clipping(self, tf_value):
         self.grad_clipping = True
         self.tf_clipper = gradient_clipping(tf_value)
-        self.tf_clipper.register_hook(self.transformer)
+        self.tf_clipper.register_hook(self.encoder)
 
     # save the gradients collected so far 
     def save_gradients(self, loc):
-        self.tf_clipper.save_grads(loc, 'tf_grads')
+        self.tf_clipper.save_grads(loc, 'nwp_grads')
     # reset the grads for a new epoch
     def reset_grads(self):
         self.tf_clipper.reset_gradients()
