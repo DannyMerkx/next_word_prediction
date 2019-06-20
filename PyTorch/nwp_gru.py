@@ -24,7 +24,7 @@ from nwp_trainer import nwp_trainer
 parser = argparse.ArgumentParser(description='Create and run an articulatory feature classification DNN')
 
 # args concerning file location
-parser.add_argument('-data_loc', type = str, default = '/data/databases/next_word_prediction/train_nwp.txt',
+parser.add_argument('-data_loc', type = str, default = '/data/databases/next_word_prediction/',
                     help = 'location of the feature file, default: /data/databases/next_word_prediction/train_nwp.txt')
 parser.add_argument('-results_loc', type = str, default = '/data/next_word_prediction/PyTorch/results/',
                     help = 'location to save the trained network parameters')
@@ -108,7 +108,7 @@ trainer.set_dict_loc(args.dict_loc)
 trainer.set_loss(torch.nn.CrossEntropyLoss(ignore_index= 0))
 trainer.set_optimizer(optimizer)
 trainer.set_token_batcher()
-trainer.set_lr_scheduler(cyclic_scheduler, 'cyclic')
+trainer.set_lr_scheduler(step_scheduler, 'cyclic')
 
 #optionally use cuda and gradient clipping
 if cuda:
@@ -122,7 +122,7 @@ if args.gradient_clipping:
 # run the training loop for the indicated amount of epochs 
 while trainer.epoch <= args.n_epochs:
     # Train on the train set    
-    trainer.train_epoch(train, args.batch_size, args.results_loc, arg.save_states)
+    trainer.train_epoch(train, args.batch_size, args.save_states, args.results_loc)
 
     if args.gradient_clipping:
         # I found that updating the clip value at each epoch did not work well     

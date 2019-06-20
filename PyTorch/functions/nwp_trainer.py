@@ -115,7 +115,7 @@ class nwp_trainer():
             self.train_loss += loss.data
             # print loss every n batches
             if num_batches in save_states:
-                print(' '.join('loss after', str(num_batches), 'steps:', str(self.train_loss.cpu().data.numpy()/num_batches)))
+                print(' '.join(['loss after', str(num_batches), 'steps:', str(self.train_loss.cpu().data.numpy()/num_batches)]))
                 self.save_params(save_loc, num_batches)
             # if there is a cyclic lr scheduler, take a step in the scheduler
             if self.scheduler == 'cyclic':
@@ -176,7 +176,7 @@ class nwp_trainer():
         print("validation loss:\t\t{:.6f}".format(self.test_loss))
     # function to save parameters in a results folder
     def save_params(self, loc, num_batches):
-        torch.save(self.encoder.state_dict(), os.path.join(loc, '_'.join('nwp_model', str(self.epoch), str(num_batches))))
+        torch.save(self.encoder.state_dict(), os.path.join(loc, '_'.join(['nwp_model', str(self.epoch), str(num_batches)])))
 ############ functions to deal with the trainer's gradient clipper ############
     # create a gradient tracker/clipper
     def set_gradient_clipping(self, tf_value):
