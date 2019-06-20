@@ -33,7 +33,7 @@ def char_batcher(lang_1, lang_2, batch_size, max_len = 128, shuffle = True):
 
 # batcher for RNN architectures (packed_padded_sequence needs to know the length
 # of the input sentences)
-def token_batcher(sents, batch_size, dict_loc, max_len = 39, shuffle = True):
+def token_batcher(sents, batch_size, dict_loc, max_len = 41, shuffle = True):
     if shuffle:
         np.random.shuffle(sents)
         

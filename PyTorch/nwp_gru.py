@@ -24,9 +24,8 @@ from nwp_trainer_gru import nwp_trainer
 parser = argparse.ArgumentParser(description='Create and run an articulatory feature classification DNN')
 
 # args concerning file location
-parser.add_argument('-data_loc', type = str, default = '/data/',
-                    help = 'location of the feature file, default: /data/train_nwp.txt')
-
+parser.add_argument('-data_loc', type = str, default = '/data/databases/next_word_prediction/train_nwp.txt',
+                    help = 'location of the feature file, default: /data/databases/next_word_prediction/train_nwp.txt')
 parser.add_argument('-results_loc', type = str, default = '/data/next_word_prediction/PyTorch/results/',
                     help = 'location to save the trained network parameters')
 parser.add_argument('-dict_loc', type = str, default = '/data/next_word_prediction/PyTorch/nwp_indices',
