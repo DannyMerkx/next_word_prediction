@@ -19,7 +19,7 @@ import pickle
 sys.path.append('/data/next_word_prediction/PyTorch/functions')
 
 from encoders import nwp_rnn_encoder
-from nwp_trainer_gru import nwp_trainer
+from nwp_trainer import nwp_trainer
 
 parser = argparse.ArgumentParser(description='Create and run an articulatory feature classification DNN')
 
