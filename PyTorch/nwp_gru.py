@@ -56,7 +56,7 @@ if args.seed:
     torch.manual_seed(args.seed[1])
 else:
     seed = np.random.randint(0, 2**32, 2)
-    print('random seeds (numpy, torch): ' + seed)
+    print('random seeds (numpy, torch): ' + str(seed))
     np.random.seed(seed[0])
     torch.manual_seed(seed[1])
     torch.backends.cudnn.deterministic = True
