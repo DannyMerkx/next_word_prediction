@@ -145,8 +145,8 @@ while trainer.epoch <= args.n_epochs:
     trainer.update_epoch()
     # reset the model for the next epoch
     for p in nwp_model.parameters():
-    if p.dim() > 1:
-        torch.nn.init.xavier_uniform_(p)
+        if p.dim() > 1:
+            torch.nn.init.xavier_uniform_(p)
     optimizer = torch.optim.SGD(nwp_model.parameters(), lr = args.lr, momentum = 0.9)
     step_scheduler = lr_scheduler.StepLR(optimizer, step_size, gamma=0.5, last_epoch=-1)
     trainer.set_encoder(nwp_model)
