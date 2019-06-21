@@ -55,7 +55,7 @@ if args.seed:
     np.random.seed(args.seed[0])
     torch.manual_seed(args.seed[1])
 else:
-    seed = np.random.randint(0, 1e16, 2)
+    seed = np.random.randint(0, 2**32, 2)
     print('random seeds (numpy, torch): ' + seed)
     np.random.seed(seed[0])
     torch.manual_seed(seed[1])
