@@ -25,20 +25,23 @@ from nwp_trainer import nwp_trainer
 parser = argparse.ArgumentParser(description='Create and run an articulatory feature classification DNN')
 
 # args concerning file location
-parser.add_argument('-data_loc', type = str, default = '/data/',
+parser.add_argument('-data_loc', type = str, default = '/data/databases/next_word_prediction/',
                     help = 'location of the training sentences, default: /data/')
 
-parser.add_argument('-results_loc', type = str, default = '/data/next_word_prediction/PyTorch/results/',
+parser.add_argument('-results_loc', type = str, default = '/data/next_word_prediction/PyTorch/tf_results/',
                     help = 'location to save the trained network parameters')
 parser.add_argument('-dict_loc', type = str, default = '/data/next_word_prediction/PyTorch/nwp_indices',
                     help = 'location of the dictionary containing the mapping between the vocabulary and the embedding indices')
 # args concerning training settings
-parser.add_argument('-batch_size', type = int, default = 128, help = 'batch size, default: 32')
-parser.add_argument('-lr', type = float, default = 0.0001, help = 'learning rate, default:0.0001')
-parser.add_argument('-n_epochs', type = int, default = 32, help = 'number of training epochs, default: 32')
+parser.add_argument('-batch_size', type = int, default = 100, help = 'batch size, default: 32')
+parser.add_argument('-lr', type = float, default = 0.5, help = 'learning rate, default:0.0001')
+parser.add_argument('-n_epochs', type = int, default = 8, help = 'number of training epochs, default: 32')
 parser.add_argument('-cuda', type = bool, default = True, help = 'use cuda (gpu), default: True')
+parser.add_argument('-save_states', type = list, default = [1000, 3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 6470000], 
+                    help = 'points in training where the model parameters are saved')
 # args concerning the database and which features to load
 parser.add_argument('-gradient_clipping', type = bool, default = False, help ='use gradient clipping, default: True')
+parser.add_argument('-seed', type = int, default = None, help = 'optional seed for the random components')
 
 args = parser.parse_args()
 
@@ -49,6 +52,18 @@ if cuda:
 else:
     print('using cpu')
 
+# check is there is a given random seed (list!). If not create one but print it so it can be used to replicate this run. 
+if args.seed:
+    np.random.seed(args.seed[0])
+    torch.manual_seed(args.seed[1])
+else:
+    seed = np.random.randint(0, 2**32, 2)
+    print('random seeds (numpy, torch): ' + str(seed))
+    np.random.seed(seed[0])
+    torch.manual_seed(seed[1])
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
 def load_obj(loc):
     with open(loc + '.pkl', 'rb') as f:
         return pickle.load(f)
@@ -57,33 +72,40 @@ def load_obj(loc):
 dict_size = len(load_obj(args.dict_loc)) + 1 
 # config settings for the transformer
 config = {'embed': {'num_embeddings': dict_size,'embedding_dim': 512, 'sparse': False, 'padding_idx':0}, 
-          'tf':{'input_size':512, 'fc_size': 2048,'n_layers': 6,'h': 8, 'max_len': 41},
+          'tf':{'input_size':512, 'fc_size': 1024,'n_layers': 6,'h': 8, 'max_len': 41},
           'cuda': cuda}
 
 def load(folder, file_name):
     open_file = open(os.path.join(folder, file_name))
-    line = [x for x in open_file]  
+    line = [x for x in open_file]
+    open_file.close()  
     return line  
     
 train = load(args.data_loc, 'train_nwp.txt')
 # set some part of the dataset apart for validation and testing
-val = train[-700000:-350000]
-test = train[-350000:]
-train = train[:-700000]
+#val = train[-700000:-350000]
+#test = train[-350000:]
+#train = train[:-700000]
 ############################### Neural network setup #################################################
 # create the network and initialise the parameters to be xavier uniform distributed
 nwp_model = nwp_transformer(config)
 for p in nwp_model.parameters():
     if p.dim() > 1:
         torch.nn.init.xavier_uniform_(p)
+    if p.dim() <=1:
+        torch.nn.init.normal_(p)
+
+model_parameters = filter(lambda p: p.requires_grad, nwp_model.parameters())
+print('#model parameters: ' + str(sum([np.prod(p.size()) for p in model_parameters])))
 
 # Adam optimiser. I found SGD to work terribly and could not find appropriate parameter settings for it.
-optimizer = torch.optim.Adam(nwp_model.parameters(), 1)
+optimizer = torch.optim.SGD(nwp_model.parameters(), lr = args.lr, momentum = 0.9)
 
 #plateau_scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode = 'min', factor = 0.2, patience = 0, 
 #                                                   threshold = 0.0001, min_lr = 1e-5, cooldown = 0)
 
-#step_scheduler = lr_scheduler.StepLR(optimizer, 1000, gamma=0.1, last_epoch=-1)
+step_size = int(len(train)/(3 * args.batch_size))
+step_scheduler = lr_scheduler.StepLR(optimizer, step_size, gamma=0.5, last_epoch=-1)
 
 # cyclic scheduler which varies the learning rate between a min and max over a certain number of epochs
 # according to a cosine function 
@@ -103,7 +125,7 @@ trainer.set_dict_loc(args.dict_loc)
 trainer.set_loss(torch.nn.CrossEntropyLoss(ignore_index= 0))
 trainer.set_optimizer(optimizer)
 trainer.set_token_batcher()
-trainer.set_lr_scheduler(cyclic_scheduler, 'cyclic')
+trainer.set_lr_scheduler(step_scheduler, 'cyclic')
 
 #optionally use cuda and gradient clipping
 if cuda:
@@ -111,19 +133,13 @@ if cuda:
 
 # gradient clipping can help stabilise training in the first epoch.
 if args.gradient_clipping:
-    trainer.set_gradient_clipping(0.05)
+    trainer.set_gradient_clipping(0.25)
 
 ################################# training/test loop #####################################=
 # run the training loop for the indicated amount of epochs 
 while trainer.epoch <= args.n_epochs:
     # Train on the train set    
     trainer.train_epoch(train, args.batch_size)
-    #evaluate on the validation set
-    trainer.test_epoch(val, args.batch_size)
-    # save network parameters
-    trainer.save_params(args.results_loc)  
-    # print some info about this epoch
-    trainer.report(args.n_epochs)   
 
     if args.gradient_clipping:
         # I found that updating the clip value at each epoch did not work well     
@@ -131,10 +147,17 @@ while trainer.epoch <= args.n_epochs:
         trainer.reset_grads()
     #increase epoch#
     trainer.update_epoch()
+    # reset the model for the next epoch
+    for p in trainer.encoder.parameters():
+        if p.dim() > 1:
+            torch.nn.init.xavier_uniform_(p)
+        if p.dim() <=1:
+            torch.nn.init.normal_(p)
 
-# evaluate on the test set. 
-trainer.test_epoch(test, args.batch_size)
-trainer.print_test_loss()
+    optimizer = torch.optim.SGD(trainer.encoder.parameters(), lr = args.lr, momentum = 0.9)
+    step_scheduler = lr_scheduler.StepLR(optimizer, step_size, gamma=0.5, last_epoch=-1)
+    trainer.set_optimizer(optimizer)
+    trainer.set_lr_scheduler(step_scheduler, 'cyclic')
 
 # save the gradients for each epoch, can be useful to select an initial clipping value.
 if args.gradient_clipping:

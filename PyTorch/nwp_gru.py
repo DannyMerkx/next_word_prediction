@@ -26,7 +26,7 @@ parser = argparse.ArgumentParser(description='Create and run an articulatory fea
 # args concerning file location
 parser.add_argument('-data_loc', type = str, default = '/data/databases/next_word_prediction/',
                     help = 'location of the feature file, default: /data/databases/next_word_prediction/train_nwp.txt')
-parser.add_argument('-results_loc', type = str, default = '/data/next_word_prediction/PyTorch/results/',
+parser.add_argument('-results_loc', type = str, default = '/data/next_word_prediction/PyTorch/gru_results/',
                     help = 'location to save the trained network parameters')
 parser.add_argument('-dict_loc', type = str, default = '/data/next_word_prediction/PyTorch/nwp_indices',
                     help = 'location of the dictionary containing the mapping between the vocabulary and the embedding indices')
@@ -77,6 +77,7 @@ config = {'embed':{'num_embeddings': dict_size, 'embedding_dim': 400, 'sparse': 
 def load(folder, file_name):
     open_file = open(os.path.join(folder, file_name))
     line = [x for x in open_file]  
+    open_file.close()
     return line  
     
 train = load(args.data_loc, 'train_nwp.txt')
@@ -89,10 +90,11 @@ train = train[:3000]
 # create the network and initialise the parameters to be xavier uniform distributed
 nwp_model = nwp_rnn_encoder(config)
 
-
 for p in nwp_model.parameters():
     if p.dim() > 1:
-        torch.nn.init.xavier_uniform_(p.data)
+        torch.nn.init.xavier_uniform_(p)
+    if p.dim() <=1:
+        torch.nn.init.normal_(p)
 
 model_parameters = filter(lambda p: p.requires_grad, nwp_model.parameters())
 print('#model parameters: ' + str(sum([np.prod(p.size()) for p in model_parameters])))
@@ -148,7 +150,10 @@ while trainer.epoch <= args.n_epochs:
     # reset the model for the next epoch
     for p in trainer.encoder.parameters():
         if p.dim() > 1:
-            torch.nn.init.xavier_uniform_(p.data)
+            torch.nn.init.xavier_uniform_(p)
+        if p.dim() <=1:
+            torch.nn.init.normal_(p)
+
     optimizer = torch.optim.SGD(trainer.encoder.parameters(), lr = args.lr, momentum = 0.9)
     step_scheduler = lr_scheduler.StepLR(optimizer, step_size, gamma=0.5, last_epoch=-1)
     trainer.set_optimizer(optimizer)
