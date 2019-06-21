@@ -34,14 +34,14 @@ parser.add_argument('-dict_loc', type = str, default = '/data/next_word_predicti
                     help = 'location of the dictionary containing the mapping between the vocabulary and the embedding indices')
 # args concerning training settings
 parser.add_argument('-batch_size', type = int, default = 100, help = 'batch size, default: 32')
-parser.add_argument('-lr', type = float, default = 0.5, help = 'learning rate, default:0.0001')
+parser.add_argument('-lr', type = float, default = 0.02, help = 'learning rate, default:0.0001')
 parser.add_argument('-n_epochs', type = int, default = 8, help = 'number of training epochs, default: 32')
 parser.add_argument('-cuda', type = bool, default = True, help = 'use cuda (gpu), default: True')
 parser.add_argument('-save_states', type = list, default = [1000, 3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 6470000], 
                     help = 'points in training where the model parameters are saved')
 # args concerning the database and which features to load
 parser.add_argument('-gradient_clipping', type = bool, default = False, help ='use gradient clipping, default: True')
-parser.add_argument('-seed', type = int, default = None, help = 'optional seed for the random components')
+parser.add_argument('-seed', type = list, default = None, help = 'optional seed for the random components')
 
 args = parser.parse_args()
 
@@ -71,8 +71,8 @@ def load_obj(loc):
 # add 1 to account for the padding
 dict_size = len(load_obj(args.dict_loc)) + 1 
 # config settings for the transformer
-config = {'embed': {'num_embeddings': dict_size,'embedding_dim': 512, 'sparse': False, 'padding_idx':0}, 
-          'tf':{'input_size':512, 'fc_size': 1024,'n_layers': 6,'h': 8, 'max_len': 41},
+config = {'embed': {'num_embeddings': dict_size,'embedding_dim': 400, 'sparse': False, 'padding_idx':0}, 
+          'tf':{'input_size':400, 'fc_size': 1024,'n_layers': 1,'h': 8, 'max_len': 41},
           'cuda': cuda}
 
 def load(folder, file_name):
@@ -139,7 +139,7 @@ if args.gradient_clipping:
 # run the training loop for the indicated amount of epochs 
 while trainer.epoch <= args.n_epochs:
     # Train on the train set    
-    trainer.train_epoch(train, args.batch_size)
+    trainer.train_epoch(train, args.batch_size, args.save_states, args.results_loc)
 
     if args.gradient_clipping:
         # I found that updating the clip value at each epoch did not work well     

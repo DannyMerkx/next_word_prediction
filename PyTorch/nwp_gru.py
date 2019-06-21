@@ -32,14 +32,14 @@ parser.add_argument('-dict_loc', type = str, default = '/data/next_word_predicti
                     help = 'location of the dictionary containing the mapping between the vocabulary and the embedding indices')
 # args concerning training settings
 parser.add_argument('-batch_size', type = int, default = 100, help = 'batch size, default: 128')
-parser.add_argument('-lr', type = float, default = 0.5, help = 'learning rate, default:0.0001')
+parser.add_argument('-lr', type = float, default = 0.05, help = 'learning rate, default:0.0001')
 parser.add_argument('-n_epochs', type = int, default = 8, help = 'number of training epochs, default: 32')
 parser.add_argument('-cuda', type = bool, default = True, help = 'use cuda (gpu), default: True')
 parser.add_argument('-save_states', type = list, default = [1000, 3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 6470000], 
                     help = 'points in training where the model parameters are saved')
 # args concerning the database and which features to load
-parser.add_argument('-gradient_clipping', type = bool, default = True, help ='use gradient clipping, default: True')
-parser.add_argument('-seed', type = int, default = None, help = 'optional seed for the random components')
+parser.add_argument('-gradient_clipping', type = bool, default = False, help ='use gradient clipping, default: True')
+parser.add_argument('-seed', type = list, default = None, help = 'optional seed for the random components')
 
 args = parser.parse_args()
 
@@ -85,7 +85,7 @@ print('#training samples: ' + str(len(train)))
 # set some part of the dataset apart for validation and testing
 #val = train[-700000:-350000]
 #test = train[-350000:]
-train = train[:3000]
+#train = train[:-700000]
 ############################### Neural network setup #################################################
 # create the network and initialise the parameters to be xavier uniform distributed
 nwp_model = nwp_rnn_encoder(config)
