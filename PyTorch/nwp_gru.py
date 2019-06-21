@@ -84,7 +84,7 @@ print('#training samples: ' + str(len(train)))
 # set some part of the dataset apart for validation and testing
 #val = train[-700000:-350000]
 #test = train[-350000:]
-#train = train[:-700000]
+train = train[:3000]
 ############################### Neural network setup #################################################
 # create the network and initialise the parameters to be xavier uniform distributed
 nwp_model = nwp_rnn_encoder(config)
@@ -143,6 +143,15 @@ while trainer.epoch <= args.n_epochs:
         trainer.reset_grads()
     #increase epoch#
     trainer.update_epoch()
+    # reset the model for the next epoch
+    for p in nwp_model.parameters():
+    if p.dim() > 1:
+        torch.nn.init.xavier_uniform_(p)
+    optimizer = torch.optim.SGD(nwp_model.parameters(), lr = args.lr, momentum = 0.9)
+    step_scheduler = lr_scheduler.StepLR(optimizer, step_size, gamma=0.5, last_epoch=-1)
+    trainer.set_encoder(nwp_model)
+    trainer.set_optimizer(optimizer)
+    trainer.set_lr_scheduler(step_scheduler, 'cyclic')
 
 # save the gradients for each epoch, can be usefull to select an initial clipping value.
 if args.gradient_clipping:
