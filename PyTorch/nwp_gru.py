@@ -31,7 +31,7 @@ parser.add_argument('-results_loc', type = str, default = '/data/next_word_predi
 parser.add_argument('-dict_loc', type = str, default = '/data/next_word_prediction/PyTorch/nwp_indices',
                     help = 'location of the dictionary containing the mapping between the vocabulary and the embedding indices')
 # args concerning training settings
-parser.add_argument('-batch_size', type = int, default = 128, help = 'batch size, default: 128')
+parser.add_argument('-batch_size', type = int, default = 100, help = 'batch size, default: 128')
 parser.add_argument('-lr', type = float, default = 0.5, help = 'learning rate, default:0.0001')
 parser.add_argument('-n_epochs', type = int, default = 8, help = 'number of training epochs, default: 32')
 parser.add_argument('-cuda', type = bool, default = True, help = 'use cuda (gpu), default: True')
@@ -39,6 +39,7 @@ parser.add_argument('-save_states', type = list, default = [1000, 3000, 10000, 3
                     help = 'points in training where the model parameters are saved')
 # args concerning the database and which features to load
 parser.add_argument('-gradient_clipping', type = bool, default = True, help ='use gradient clipping, default: True')
+parser.add_argument('-seed', type = int, default = None, help = 'optional seed for the random components')
 
 args = parser.parse_args()
 
@@ -48,6 +49,18 @@ if cuda:
     print('using gpu')
 else:
     print('using cpu')
+
+# check is there is a given random seed (list!). If not create one but print it so it can be used to replicate this run. 
+if args.seed:
+    np.random.seed(args.seed[0])
+    torch.manual_seed(args.seed[1])
+else:
+    seed = np.random.randint(0, 1e16, 2)
+    print('random seeds (numpy, torch): ' + seed)
+    np.random.seed(seed[0])
+    torch.manual_seed(seed[1])
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 def load_obj(loc):
     with open(loc + '.pkl', 'rb') as f:
@@ -87,7 +100,7 @@ optimizer = torch.optim.SGD(nwp_model.parameters(), lr = args.lr, momentum = 0.9
 
 #plateau_scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode = 'min', factor = 0.2, patience = 0, 
 #                                                   threshold = 0.0001, min_lr = 1e-5, cooldown = 0)
-step_size = int(len(train)/3)
+step_size = int(len(train)/(3 * args.batch_size))
 step_scheduler = lr_scheduler.StepLR(optimizer, step_size, gamma=0.5, last_epoch=-1)
 
 # cyclic scheduler which varies the learning rate between a min and max over a certain number of epochs

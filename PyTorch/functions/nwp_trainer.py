@@ -114,9 +114,9 @@ class nwp_trainer():
             # add loss to average
             self.train_loss += loss.data
             # print loss every n batches
-            if num_batches in save_states:
-                print(' '.join(['loss after', str(num_batches), 'steps:', str(self.train_loss.cpu().data.numpy()/num_batches)]))
-                self.save_params(save_loc, num_batches)
+            if int(num_batches * batch_size) in save_states:
+                print(' '.join(['loss after', str(num_batches), 'sentences:', str(self.train_loss.cpu().data.numpy()/num_batches)]))
+                self.save_params(save_loc, int(num_batches * batch_size))
             # if there is a cyclic lr scheduler, take a step in the scheduler
             if self.scheduler == 'cyclic':
                 self.lr_scheduler.step()
