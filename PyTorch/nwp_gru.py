@@ -88,9 +88,14 @@ train = train[:3000]
 ############################### Neural network setup #################################################
 # create the network and initialise the parameters to be xavier uniform distributed
 nwp_model = nwp_rnn_encoder(config)
-for p in nwp_model.parameters():
-    if p.dim() > 1:
-        torch.nn.init.xavier_uniform_(p)
+
+def init_weights(m)
+    if m.dim() > 1:
+        torch.nn.init.xavier_uniform_(m.weight.data)
+    if m.bias is not None:
+        torch.nn.init.normal_(m.bias.data)
+
+nwp_model.apply(init_weights)
 
 model_parameters = filter(lambda p: p.requires_grad, nwp_model.parameters())
 print('#model parameters: ' + str(sum([np.prod(p.size()) for p in model_parameters])))
@@ -144,9 +149,7 @@ while trainer.epoch <= args.n_epochs:
     #increase epoch#
     trainer.update_epoch()
     # reset the model for the next epoch
-    for p in nwp_model.parameters():
-        if p.dim() > 1:
-            torch.nn.init.xavier_uniform_(p)
+    nwp_model.apply(init_weights)
     optimizer = torch.optim.SGD(nwp_model.parameters(), lr = args.lr, momentum = 0.9)
     step_scheduler = lr_scheduler.StepLR(optimizer, step_size, gamma=0.5, last_epoch=-1)
     trainer.set_encoder(nwp_model)
