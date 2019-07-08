@@ -9,6 +9,11 @@ import numpy as np
 from prep_text import char_2_index, word_2_index
 from nltk.tokenize.nist import NISTTokenizer
 
+# loader for the dictionary, loads a pickled dictionary.
+def load_obj(loc):
+    with open(loc + '.pkl', 'rb') as f:
+        return pickle.load(f)
+
 # pastes the parsed wmt sentences back together into the original string
 def char_batcher(lang_1, lang_2, batch_size, max_len = 128, shuffle = True):
     if shuffle:
@@ -31,20 +36,36 @@ def char_batcher(lang_1, lang_2, batch_size, max_len = 128, shuffle = True):
         l2 = clean(l2)
         yield l1, l2
 
-# batcher for RNN architectures (packed_padded_sequence needs to know the length
-# of the input sentences)
+# batcher which tokenises text and converts it to given embedding indices
 def token_batcher(sents, batch_size, dict_loc, max_len = 41, shuffle = True):
     if shuffle:
         np.random.shuffle(sents)
-        
+    # load a dictionary with indices
+    w_dict = load_obj(dict_loc)    
     for start_idx in range(0, len(sents) - batch_size + 1, batch_size):
-        # take a batch of nodes of the given size               
+        # take a batch of the given batch size               
         excerpt = sents[start_idx:start_idx + batch_size]
-        # tokenise the batch and insert start and end of sentence tokens
+        # tokenise the batch
         excerpt = [x.split()[:max_len] for x in excerpt]
         # converts the sentence to token ids. 
-        excerpt, lengths = word_2_index(excerpt, batch_size, dict_loc)      
+        excerpt, lengths = word_2_index(excerpt, batch_size, w_dict)      
         yield excerpt, lengths
+
+# batcher for data that has already been converted to indices. 
+def index_batcher(sents, batch_size, max_len = 41, shuffle = True)
+    if shuffle:
+        np.random.shuffle(sents) 
+    for start_idx in range(0, len(sents) - batch_size + 1, batch_size):
+        # take a batch of the given batch size               
+        excerpt = sents[start_idx:start_idx + batch_size]
+        # get the max sentence length for this batch
+    	max_sent_len = max([len(x) for x in excerpt])
+        for i, sent in enumerate(excerpt):
+            # keep track of unpadded sentence length
+            lengths.append(len(sent))
+            # pad the sentence to the max length
+            excerpt[i] = np.pad(sent, [0, max_l - len(sent)], mode = 'constant')      
+        yield index_batch, lengths
         
 def pad(lang):
     # pad all sents to the max lenght in the batch

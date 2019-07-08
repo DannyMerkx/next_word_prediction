@@ -17,6 +17,7 @@ import numpy as np
 import sys
 import os
 import pickle
+import csv
 sys.path.append('/data/next_word_prediction/PyTorch/functions')
 
 from encoders import nwp_transformer
@@ -41,7 +42,7 @@ parser.add_argument('-save_states', type = list, default = [1000, 3000, 10000, 3
                     help = 'points in training where the model parameters are saved')
 # args concerning the database and which features to load
 parser.add_argument('-gradient_clipping', type = bool, default = False, help ='use gradient clipping, default: True')
-parser.add_argument('-seed', type = list, default = None, help = 'optional seed for the random components')
+parser.add_argument('-seed', type = list, default = [745546129, 1936929273], help = 'optional seed for the random components')
 
 args = parser.parse_args()
 
@@ -56,6 +57,8 @@ else:
 if args.seed:
     np.random.seed(args.seed[0])
     torch.manual_seed(args.seed[1])
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 else:
     seed = np.random.randint(0, 2**32, 2)
     print('random seeds (numpy, torch): ' + str(seed))
@@ -81,7 +84,13 @@ def load(folder, file_name):
     open_file.close()  
     return line  
     
-train = load(args.data_loc, 'train_nwp.txt')
+def load_index(folder, file_name):
+    open_file = open(os.path.join(folder, file_name))
+    reader = csv.reader(open_file, delimiter = ',')
+    line = [[int(y) for y in x] for x in reader]
+    open_file.close()
+    return line
+train = load_index(args.data_loc, 'train_nwp.txt')
 # set some part of the dataset apart for validation and testing
 #val = train[-700000:-350000]
 #test = train[-350000:]
@@ -92,14 +101,14 @@ nwp_model = nwp_transformer(config)
 for p in nwp_model.parameters():
     if p.dim() > 1:
         torch.nn.init.xavier_uniform_(p)
-    if p.dim() <=1:
-        torch.nn.init.normal_(p)
+#    if p.dim() <=1:
+#        torch.nn.init.normal_(p)
 
 model_parameters = filter(lambda p: p.requires_grad, nwp_model.parameters())
 print('#model parameters: ' + str(sum([np.prod(p.size()) for p in model_parameters])))
 
 # Adam optimiser. I found SGD to work terribly and could not find appropriate parameter settings for it.
-optimizer = torch.optim.SGD(nwp_model.parameters(), lr = args.lr, momentum = 0.9)
+optimizer = torch.optim.Adam(nwp_model.parameters(), lr = args.lr)
 
 #plateau_scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode = 'min', factor = 0.2, patience = 0, 
 #                                                   threshold = 0.0001, min_lr = 1e-5, cooldown = 0)
@@ -117,14 +126,14 @@ def create_cyclic_scheduler(max_lr, min_lr, stepsize):
     # min and max lr   
     return(cyclic_scheduler)
 
-cyclic_scheduler = create_cyclic_scheduler(max_lr = args.lr, min_lr = args.lr * 0.2, stepsize = int(len(train)/args.batch_size)*4)
+#cyclic_scheduler = create_cyclic_scheduler(max_lr = args.lr, min_lr = args.lr * 0.2, stepsize = int(len(train)/args.batch_size)*4)
 
 # create a trainer setting the loss function, optimizer, minibatcher and lr_scheduler
 trainer = nwp_trainer(nwp_model)
 trainer.set_dict_loc(args.dict_loc)
 trainer.set_loss(torch.nn.CrossEntropyLoss(ignore_index= 0))
 trainer.set_optimizer(optimizer)
-trainer.set_token_batcher()
+trainer.set_index_batcher()
 trainer.set_lr_scheduler(step_scheduler, 'cyclic')
 
 #optionally use cuda and gradient clipping
@@ -151,11 +160,13 @@ while trainer.epoch <= args.n_epochs:
     for p in trainer.encoder.parameters():
         if p.dim() > 1:
             torch.nn.init.xavier_uniform_(p)
-        if p.dim() <=1:
-            torch.nn.init.normal_(p)
-
-    optimizer = torch.optim.SGD(trainer.encoder.parameters(), lr = args.lr, momentum = 0.9)
+#        if p.dim() <=1:
+#            torch.nn.init.normal_(p)
+    optimizer = torch.optim.Adam(nwp_model.parameters(), lr = args.lr)
     step_scheduler = lr_scheduler.StepLR(optimizer, step_size, gamma=0.5, last_epoch=-1)
+    trainer.set_encoder(nwp_model)
+    if cuda:
+        trainer.set_cuda()
     trainer.set_optimizer(optimizer)
     trainer.set_lr_scheduler(step_scheduler, 'cyclic')
 

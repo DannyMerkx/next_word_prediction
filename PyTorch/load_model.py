@@ -18,9 +18,9 @@ from collections import defaultdict
 from encoders import nwp_transformer, nwp_rnn_encoder
 from prep_text import word_2_index
 # location of a pre-trained model
-model_loc = '/home/danny/Downloads/models'
+model_loc = '/home/danny/Documents/databases/next_word_prediction/Models'
 # location of the sentences to be encoded.
-data_loc = '/home/danny/Documents/databases/next_word_prediction/test.txt'
+data_loc = '/home/danny/Documents/databases/next_word_prediction/data/test.txt'
 dict_loc = './nwp_indices'
 
 # list all the pretrained models
@@ -44,11 +44,10 @@ def test_loss(data_loc, model, loss):
             # split the sentence into tokens
             sent = [line.split()]
             # convert text to indices
-            prep_text, s_lengths = word_2_index(sent, 1, 'nwp_indices')
+            prep_text, s_lengths = word_2_index(sent, 1, nwp_dict)
             # get the predictions and targets for this sentence
             prediction, targets = nwp_model(torch.FloatTensor(prep_text), s_lengths)
     
-            
             l += loss(prediction.view(-1, prediction.size(-1)), targets.view(-1)).data
             it += 1
     print(l/it)
@@ -80,7 +79,7 @@ def calc_surprisal(data_loc, model, loss):
             # split the sentence into tokens
             sent.append(['<s>'] + line.split() + ['</s>'])
     # convert text to indices, keep original sentence length to remove padding later
-    sents, sent_l = word_2_index(sent, 361, 'nwp_indices')
+    sents, sent_l = word_2_index(sent, 361, nwp_dict)
     # sort the sentences by decreasing length (needed for pack_padded_sequence in the gru)
     sort_idx, sents, sent_l = sort_decrease(sents, sent_l)
     # get the predictions and targets for this sentence
@@ -123,7 +122,7 @@ def clean_surprisal(surprisal, targets):
 
 # config settings for the models;
 transformer_config = {'embed': {'num_embeddings': dict_size,'embedding_dim': 400, 'sparse': False, 'padding_idx':0}, 
-          'tf':{'input_size':400, 'fc_size': 2048,'n_layers': 2,'h': 8, 'max_len': 41},
+          'tf':{'input_size':400, 'fc_size': 1024,'n_layers': 1,'h': 8, 'max_len': 41},
           'cuda': False}
 gru_config = {'embed':{'num_embeddings': dict_size, 'embedding_dim': 400, 'sparse': False, 'padding_idx': 0}, 'max_len': 41,
                'rnn':{'input_size': 400, 'hidden_size': 500, 'num_layers': 1, 'batch_first': True,
@@ -191,8 +190,8 @@ data[models] = data[models].round(4)
 data.sent_nr = data.sent_nr.astype(int)
 data.word_pos = data.word_pos.astype(int)
 
-data.to_csv(path_or_buf = '/home/danny/Downloads/surprisal.csv')
+data.to_csv(path_or_buf = '/home/danny/Documents/databases/next_word_prediction/data/surprisal_test.csv')
 loss_vals = pd.DataFrame(loss_vals)
 loss_vals.columns = ['loss', 'model_name']
 loss_vals.loss = loss_vals.loss.astype(float)
-loss_vals.to_csv(path_or_buf = '/home/danny/Downloads/lm_accuracy.csv')
+loss_vals.to_csv(path_or_buf = '/home/danny/Documents/databases/next_word_prediction/data/lm_accuracy.csv')

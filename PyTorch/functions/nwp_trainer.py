@@ -5,7 +5,7 @@ Created on Mon Nov 26 14:49:30 2018
 
 @author: danny
 """
-from mini_batcher import char_batcher, token_batcher
+from mini_batcher import token_batcher, index_batcher
 from grad_tracker import gradient_clipping
 from torch.autograd import Variable
 
@@ -34,14 +34,14 @@ class nwp_trainer():
         self.epoch = 1
         
     # the possible minibatcher for all different types of data for the databases (tokens and chars)
-    def char_batcher(self, sents, batch_size, max_len, shuffle):
-        return char_batcher(sents, batch_size, max_len, shuffle)
+    def index_batcher(self, sents, batch_size, max_len, shuffle):
+        return index_batcher(sents, batch_size, max_len, shuffle)
     def token_batcher(self, sents, batch_size, max_len, shuffle):
         return token_batcher(sents, batch_size, self.dict_loc, max_len, shuffle)
 ################## functions to set class values and attributes ###############
     # functions to set which minibatcher to use. Needs to be called as no default is set.
-    def set_char_batcher(self):
-        self.batcher = self.char_batcher
+    def set_index_batcher(self):
+        self.batcher = self.index_batcher
     def set_token_batcher(self):
         self.batcher = self.token_batcher
     # function to set the learning rate scheduler and type (for deciding when to update the schedule etc.)
@@ -93,6 +93,7 @@ class nwp_trainer():
         # for keeping track of the average loss over all batches
         self.train_loss = 0
         num_batches = 0
+        st = 0
         for batch in self.batcher(sents, batch_size, 
                                   self.encoder.max_len, shuffle = True):
             # retrieve a minibatch from the batcher
@@ -114,9 +115,11 @@ class nwp_trainer():
             # add loss to average
             self.train_loss += loss.data
             # print loss every n batches
-            if int(num_batches * batch_size) in save_states:
+            if int(num_batches * batch_size) == save_states[st]:
                 print(' '.join(['loss after', str(num_batches * batch_size), 'sentences:', str(self.train_loss.cpu().data.numpy()/num_batches)]))
                 self.save_params(save_loc, int(num_batches * batch_size))
+                st += 1
+                print(self.start_time - time.time())
             # if there is a cyclic lr scheduler, take a step in the scheduler
             if self.scheduler == 'cyclic':
                 self.lr_scheduler.step()
