@@ -59,13 +59,14 @@ def index_batcher(sents, batch_size, max_len = 41, shuffle = True):
         # take a batch of the given batch size               
         excerpt = sents[start_idx:start_idx + batch_size]
         # get the max sentence length for this batch
-    	max_sent_len = max([len(x) for x in excerpt])
+        max_l = max([len(x) for x in excerpt])
+        lengths = []
         for i, sent in enumerate(excerpt):
             # keep track of unpadded sentence length
             lengths.append(len(sent))
             # pad the sentence to the max length
             excerpt[i] = np.pad(sent, [0, max_l - len(sent)], mode = 'constant')      
-        yield index_batch, lengths
+        yield excerpt, lengths
         
 def pad(lang):
     # pad all sents to the max lenght in the batch
