@@ -52,7 +52,7 @@ def token_batcher(sents, batch_size, dict_loc, max_len = 41, shuffle = True):
         yield excerpt, lengths
 
 # batcher for data that has already been converted to indices. 
-def index_batcher(sents, batch_size, max_len = 41, shuffle = True)
+def index_batcher(sents, batch_size, max_len = 41, shuffle = True):
     if shuffle:
         np.random.shuffle(sents) 
     for start_idx in range(0, len(sents) - batch_size + 1, batch_size):
