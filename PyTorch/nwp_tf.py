@@ -90,7 +90,7 @@ def load_index(folder, file_name):
     line = [[int(y) for y in x] for x in reader]
     open_file.close()
     return line
-train = load_index(args.data_loc, 'train_indices.txt')
+train = load_index(args.data_loc, 'train_indices.csv')
 # set some part of the dataset apart for validation and testing
 #val = train[-700000:-350000]
 #test = train[-350000:]

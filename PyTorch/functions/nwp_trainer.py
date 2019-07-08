@@ -119,7 +119,7 @@ class nwp_trainer():
                 print(' '.join(['loss after', str(num_batches * batch_size), 'sentences:', str(self.train_loss.cpu().data.numpy()/num_batches)]))
                 self.save_params(save_loc, int(num_batches * batch_size))
                 st += 1
-                print(self.start_time - time.time())
+                print(time.time() - self.start_time)
             # if there is a cyclic lr scheduler, take a step in the scheduler
             if self.scheduler == 'cyclic':
                 self.lr_scheduler.step()

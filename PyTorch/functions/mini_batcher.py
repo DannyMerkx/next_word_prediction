@@ -6,6 +6,7 @@ Created on Mon Nov 26 15:30:05 2018
 @author: danny
 """
 import numpy as np
+import pickle
 from prep_text import char_2_index, word_2_index
 from nltk.tokenize.nist import NISTTokenizer
 
@@ -65,8 +66,8 @@ def index_batcher(sents, batch_size, max_len = 41, shuffle = True):
             # keep track of unpadded sentence length
             lengths.append(len(sent))
             # pad the sentence to the max length
-            excerpt[i] = np.pad(sent, [0, max_l - len(sent)], mode = 'constant')      
-        yield excerpt, lengths
+            excerpt[i] = np.pad(sent, [0, max_l - len(sent)], mode = 'constant')     
+        yield np.array(excerpt), lengths
         
 def pad(lang):
     # pad all sents to the max lenght in the batch
