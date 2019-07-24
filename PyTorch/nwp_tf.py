@@ -34,7 +34,7 @@ parser.add_argument('-results_loc', type = str, default = '/data/next_word_predi
 parser.add_argument('-dict_loc', type = str, default = '/data/next_word_prediction/PyTorch/nwp_indices',
                     help = 'location of the dictionary containing the mapping between the vocabulary and the embedding indices')
 # args concerning training settings
-parser.add_argument('-batch_size', type = int, default = 100, help = 'batch size, default: 32')
+parser.add_argument('-batch_size', type = int, default = 10, help = 'batch size, default: 32')
 parser.add_argument('-lr', type = float, default = 0.02, help = 'learning rate, default:0.0001')
 parser.add_argument('-n_epochs', type = int, default = 8, help = 'number of training epochs, default: 32')
 parser.add_argument('-cuda', type = bool, default = True, help = 'use cuda (gpu), default: True')
@@ -90,7 +90,8 @@ def load_index(folder, file_name):
     line = [[int(y) for y in x] for x in reader]
     open_file.close()
     return line
-train = load_index(args.data_loc, 'train_indices.csv')
+
+train = load(args.data_loc, 'train_nwp.txt')
 # set some part of the dataset apart for validation and testing
 #val = train[-700000:-350000]
 #test = train[-350000:]
@@ -108,18 +109,18 @@ model_parameters = filter(lambda p: p.requires_grad, nwp_model.parameters())
 print('#model parameters: ' + str(sum([np.prod(p.size()) for p in model_parameters])))
 
 # Adam optimiser. I found SGD to work terribly and could not find appropriate parameter settings for it.
-optimizer = torch.optim.Adam(nwp_model.parameters(), lr = args.lr)
+optimizer = torch.optim.SGD(nwp_model.parameters(), lr = args.lr, momentum = .9)
 
 #plateau_scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode = 'min', factor = 0.2, patience = 0, 
 #                                                   threshold = 0.0001, min_lr = 1e-5, cooldown = 0)
 
 step_size = int(len(train)/(3 * args.batch_size))
-step_scheduler = lr_scheduler.StepLR(optimizer, step_size, gamma=0.5, last_epoch=-1)
+step_scheduler = lr_scheduler.StepLR(optimizer, step_size, gamma=.5, last_epoch=-1)
 
 # cyclic scheduler which varies the learning rate between a min and max over a certain number of epochs
 # according to a cosine function 
 def create_cyclic_scheduler(max_lr, min_lr, stepsize):
-    lr_lambda = lambda iteration: (max_lr - min_lr)*(0.5 * (np.cos(np.pi * (1 + (3 - 1) / stepsize * iteration)) + 1))+min_lr
+    lr_lambda = lambda iteration: (max_lr - min_lr)*(.5 * (np.cos(np.pi * (1 + (3 - 1) / stepsize * iteration)) + 1))+min_lr
     cyclic_scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda, last_epoch=-1)
     # lambda function which uses the cosine function to cycle the learning rate between the given min and max rates
     # the function operates between 1 and 3 (so the cos cycles from -1 to -1 ) normalise between 0 and 1 and then press between
@@ -133,7 +134,7 @@ trainer = nwp_trainer(nwp_model)
 trainer.set_dict_loc(args.dict_loc)
 trainer.set_loss(torch.nn.CrossEntropyLoss(ignore_index= 0))
 trainer.set_optimizer(optimizer)
-trainer.set_index_batcher()
+trainer.set_token_batcher()
 trainer.set_lr_scheduler(step_scheduler, 'cyclic')
 
 #optionally use cuda and gradient clipping
@@ -157,7 +158,8 @@ while trainer.epoch <= args.n_epochs:
     #increase epoch#
     trainer.update_epoch()
     # reset the model for the next epoch
-    for p in trainer.encoder.parameters():
+    nwp_model = nwp_rnn_encoder(config)
+    for p in nwp_model.parameters():
         if p.dim() > 1:
             torch.nn.init.xavier_uniform_(p)
 #        if p.dim() <=1:

@@ -98,7 +98,7 @@ class attention(nn.Module):
         # calculate the attention weights
         self.alpha = self.softmax(self.out(nn.functional.tanh(self.hidden(input))))
         # apply the weights to the input and sum over all timesteps
-        x = torch.sum(self.alpha * input, 1)
+        x = self.alpha * input
         # return the resulting embedding
         return x   
     

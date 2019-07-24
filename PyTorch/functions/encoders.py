@@ -18,7 +18,7 @@ class text_rnn_encoder(nn.Module):
     def __init__(self, config):
         super(text_rnn_encoder, self).__init__()
         embed = config['embed']
-        rnn= config['rnn']
+        rnn = config['rnn']
         att = config ['att'] 
         self.embed = nn.Embedding(num_embeddings = embed['num_embeddings'], 
                                   embedding_dim = embed['embedding_dim'], sparse = embed['sparse'],
@@ -59,7 +59,7 @@ class img_encoder(nn.Module):
             return nn.functional.normalize(x, p=2, dim=1)
         else:
             return x
-###################################transformer architectures#########################################
+################################### transformer architectures #########################################
 
 # transformer model which takes aligned input in two languages and learns
 # to translate from language to the other. 
@@ -126,34 +126,39 @@ class nwp_rnn_encoder(nn.Module):
     def __init__(self, config):
         super(nwp_rnn_encoder, self).__init__()
         embed = config['embed']
-        rnn= config['rnn']
+        rnn = config['rnn']
         lin_1 = config['lin1']
-        lin_2 = config['lin2'] 
+        lin_2 = config['lin2']
+        att = config ['att']
+
         self.max_len = config['max_len']
-	# create the embedding layer
         self.embed = nn.Embedding(num_embeddings = embed['num_embeddings'], 
                                   embedding_dim = embed['embedding_dim'], sparse = embed['sparse'],
                                   padding_idx = embed['padding_idx'])
-	# create the RNN layer
+
         self.RNN = nn.GRU(input_size = rnn['input_size'], hidden_size = rnn['hidden_size'], 
                           num_layers = rnn['num_layers'], batch_first = rnn['batch_first'],
                           bidirectional = rnn['bidirectional'], dropout = rnn['dropout'])
-	# linear layers to map to the dictionary
-        self.linear_1 = nn.Linear(lin_1['input_size'], lin_1['output_size']) 
-        self.tan = nn.Tanh()       
+
+        self.att = multi_attention(in_size = att['in_size'], hidden_size = att['hidden_size'], n_heads = att['heads'])
+
+        self.linear_1 = nn.Linear(lin_1['input_size'], lin_1['output_size'])       
         self.linear_2 = nn.Linear(lin_2['input_size'], embed['num_embeddings'])
-      
-    def forward(self, input, l):
-	# create the targets (input shifted left, padded with 0)
+        self.tan = nn.Tanh() 
+
+    def forward(self, input, sent_lens):
+	# create the targets by shifting the input left
         targs = torch.nn.functional.pad(input[:,1:], [0,1]).long()
-        # embedding layers expect Long tensors
-        x = self.embed(input.long())
+
+        embeddings = self.embed(input.long())
         # create a packed_sequence object. The padding will be excluded from the update step
         # thereby training on the original sequence length only
-        x = torch.nn.utils.rnn.pack_padded_sequence(x, l, batch_first=True)
+        x = torch.nn.utils.rnn.pack_padded_sequence(embeddings, sent_lens, batch_first = True)
+
         x, hx = self.RNN(x)
         # unpack again as at the moment only rnn layers except packed_sequence objects
         x, lens = nn.utils.rnn.pad_packed_sequence(x, batch_first = True)
+        x = self.att(x)
 	# use the linear layers to map to the output dictionary
         x = self.linear_2(self.tan(self.linear_1(x)))  
         return x, targs

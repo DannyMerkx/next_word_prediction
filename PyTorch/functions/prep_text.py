@@ -11,7 +11,6 @@ layer indices.
 """
 import string
 import numpy as np
-import pickle
 
 def find_index(char):
     # define the set of valid characters.
