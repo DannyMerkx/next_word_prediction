@@ -94,14 +94,19 @@ class attention(nn.Module):
         self.out = nn.Linear(hidden_size, in_size)
         nn.init.orthogonal(self.hidden.weight.data)
         self.softmax = nn.Softmax(dim = 1)
+    
     def forward(self, input):
         # calculate the attention weights
-        self.alpha = self.softmax(self.out(nn.functional.tanh(self.hidden(input))))
-        # apply the weights to the input and sum over all timesteps
-        x = self.alpha * input
-        # return the resulting embedding
+        self.alpha = self.out(nn.functional.tanh(self.hidden(input)))
+        x = self.apply_attention(input)
         return x   
     
+    def apply_attention(self, input):
+        att_applied = torch.zeros(input.shape)
+        for x in range(1, input.shape[1]):
+            _alpha = self.softmax(self.alpha[:,:x,:])
+            att_applied[:, x - 1, :] = torch.sum(_alpha * input[:,:x,:], 1)
+        return att_applied
 ################################ Transformer Layers ###########################
         
 # single encoder transformer cell with h attention heads fully connected layer block and residual connections

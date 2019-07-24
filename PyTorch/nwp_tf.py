@@ -35,7 +35,7 @@ parser.add_argument('-dict_loc', type = str, default = '/data/next_word_predicti
                     help = 'location of the dictionary containing the mapping between the vocabulary and the embedding indices')
 # args concerning training settings
 parser.add_argument('-batch_size', type = int, default = 10, help = 'batch size, default: 32')
-parser.add_argument('-lr', type = float, default = 0.02, help = 'learning rate, default:0.0001')
+parser.add_argument('-lr', type = float, default = 0.005, help = 'learning rate, default:0.0001')
 parser.add_argument('-n_epochs', type = int, default = 8, help = 'number of training epochs, default: 32')
 parser.add_argument('-cuda', type = bool, default = True, help = 'use cuda (gpu), default: True')
 parser.add_argument('-save_states', type = list, default = [1000, 3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 6470000], 
