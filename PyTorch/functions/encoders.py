@@ -21,7 +21,6 @@ class nwp_transformer(transformer):
         super(nwp_transformer, self).__init__()
         embed = config['embed']
         tf= config['tf']
-        lin = config['lin']
         # makes sure variables are mapped to the gpu if needed
         self.is_cuda = config['cuda']
         self.max_len = tf['max_len']
@@ -35,7 +34,7 @@ class nwp_transformer(transformer):
         self.TF_enc = transformer_encoder(in_size = tf['input_size'], fc_size = tf['fc_size'], 
                               n_layers = tf['n_layers'], h = tf['h'])
         # linear layer maps to the output dictionary
-	self.linear = nn.Sequential(nn.Linear(tf['input_size'], tf['input_size']), nn.Tanh(), 
+        self.linear = nn.Sequential(nn.Linear(tf['input_size'], tf['input_size']), nn.Tanh(), 
                                     nn.Linear(tf['input_size'], embed['num_embeddings']))
 
     # l is included as a dummy to keep all code compatible with both Transformers and RNNs (which need the length of the unpadded sentences)

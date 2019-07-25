@@ -20,7 +20,7 @@ import pickle
 import csv
 sys.path.append('/data/next_word_prediction/PyTorch/functions')
 
-from encoders import nwp_transformer
+from encoders import nwp_transformer, nwp_transformer_simple
 from nwp_trainer import nwp_trainer
 
 parser = argparse.ArgumentParser(description='Create and run an articulatory feature classification DNN')
@@ -92,13 +92,14 @@ def load_index(folder, file_name):
     return line
 
 train = load(args.data_loc, 'train_nwp.txt')
+print('learning rate: ' + str(args.lr))
 # set some part of the dataset apart for validation and testing
 #val = train[-700000:-350000]
 #test = train[-350000:]
 #train = train[:-700000]
 ############################### Neural network setup #################################################
 # create the network and initialise the parameters to be xavier uniform distributed
-nwp_model = nwp_transformer(config)
+nwp_model = nwp_transformer_simple(config)
 for p in nwp_model.parameters():
     if p.dim() > 1:
         torch.nn.init.xavier_uniform_(p)

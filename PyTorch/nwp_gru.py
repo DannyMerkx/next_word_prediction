@@ -83,7 +83,7 @@ def load(folder, file_name):
     return line  
     
 train = load(args.data_loc, 'train_nwp.txt')
-print('#training samples: ' + str(len(train)))
+print('learning rate: ' + str(args.lr))
 # set some part of the dataset apart for validation and testing
 #val = train[-700000:-350000]
 #test = train[-350000:]
