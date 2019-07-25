@@ -75,7 +75,7 @@ def load_obj(loc):
 dict_size = len(load_obj(args.dict_loc)) + 1 
 # config settings for the transformer
 config = {'embed': {'num_embeddings': dict_size,'embedding_dim': 400, 'sparse': False, 'padding_idx':0}, 
-          'tf':{'input_size':400, 'fc_size': 1024,'n_layers': 1,'h': 8, 'max_len': 41},
+          'tf':{'input_size':400, 'fc_size': 1024,'n_layers': 1,'h': 8, 'max_len': 41},  
           'cuda': cuda}
 
 def load(folder, file_name):

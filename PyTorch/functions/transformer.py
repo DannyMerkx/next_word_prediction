@@ -3,6 +3,13 @@
 """
 Created on Fri Nov 16 18:31:24 2018
 
+This script contains functions that serve as the 'forward' function of the Transformer. This 
+brings together the encoder and decoder parts, differentiate between training and test time
+situations and provides as 'forward' function for situations where you just use the Transformer
+as an encoder. Furthermore this script contains functions to load pre-trained embeddings, create 
+the encoder and decoder masks, create the positional embeddings and perform beam search on predicted
+sequences. 
+
 @author: danny
 """
 from load_embeddings import load_word_embeddings
