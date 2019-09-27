@@ -335,7 +335,7 @@ class transformer(nn.Module):
     def create_dec_mask(self, input):
         seq_len = input.size(1)
         # create a mask which masks the padding indices
-        mask = (input != 0).unsqueeze(1)
+        mask = (input != 0).unsqueeze(1).byte()
         # create a mask which masks for each time-step the future time-steps
         triu = (np.triu(np.ones([1, seq_len, seq_len]), k = 1) == 0).astype('uint8')
         
@@ -344,7 +344,7 @@ class transformer(nn.Module):
         else:
             dtype = torch.ByteTensor
         # combine the two masks
-        return dtype(triu) & mask
+        return dtype(triu) & dtype(mask)
             
     # Function used for training a transformer encoder-decoder, use in 
     # the forward function of your network

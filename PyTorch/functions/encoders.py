@@ -56,7 +56,8 @@ class nwp_transformer_2lin(transformer):
     def forward(self, input, l = False):
 
         out, targs = self.encoder_train(input)
-        
+        # apply the classification layer to the transformer output
+        out = self.linear(out)        
         return out, targs
 
 # Vannilla next word prediction transformer 
@@ -89,7 +90,8 @@ class nwp_transformer(transformer):
     def forward(self, input, l = False):
 
         out, targs = self.encoder_train(input)
-        
+        # apply the classification layer to the transformer output
+        out = self.linear(out)
         return out, targs
 
 ########################################################################################################
