@@ -18,14 +18,14 @@ from collections import defaultdict
 from encoders import *
 from prep_text import word_2_index
 # location of a pre-trained model
-model_loc = '/home/danny/Documents/databases/next_word_prediction/trained_models'
+model_loc = '/home/danny/Documents/papers/nwp_paper/trained_models/'
 # location of the sentences to be encoded.
 data_loc = '/home/danny/Documents/databases/next_word_prediction/data/test.txt'
 dict_loc = './nwp_indices'
 
 # list all the pretrained models
 model_list = [x for x in os.walk(model_loc)]
-model_list = [os.path.join(x[0], y) for x in model_list[1:] for y in x[2]]
+model_list = [os.path.join(x[0], y) for x in model_list[1:] for y in x[2] if not '.out' in y]
 model_list.sort()
 
 # function to load a pickled dictionary with the indices of each possible token
@@ -36,25 +36,15 @@ def load_obj(loc):
 nwp_dict = load_obj(dict_loc)
 dict_size = len(nwp_dict) + 1 
 
-
 def index_2_word(dictionary, indices):
     rev_dictionary = defaultdict(str)
     for x, y in dictionary.items():
         rev_dictionary[y] = x
     sentences = [[rev_dictionary[int(i)] for i in ind] for ind in indices]   
     return(sentences)
-
-# function to sort senteces by decreasing length (necessary to use pack_padded_sequence
-# in pytorch)
-def sort_decrease(sents, lengths):
-    # we need to keep the original argsort indices in order to reverse the sorting later  
-    sort_idx = np.argsort(- np.array(lengths))
-    sents = sents[sort_idx]    
-    lengths = np.array(lengths)[sort_idx] 
-    return sort_idx, sents, lengths
   
 # function to produce the surprisal ratings for the test sentences
-def calc_surprisal(data_loc, model, loss):
+def calc_surprisal(data_loc, model):
     surprisal = []
     sent = []
     with open(data_loc) as file:
@@ -62,22 +52,22 @@ def calc_surprisal(data_loc, model, loss):
             # split the sentence into tokens
             sent.append(['<s>'] + line.split() + ['</s>'])
     # convert text to indices, 
-    sents, sent_l = word_2_index(sent, len(sent), nwp_dict)
-    sort_idx, sents, sent_l = sort_decrease(sents, sent_l)
+    sent, l = word_2_index(sent, len(sent), nwp_dict)
+
     # get the predictions and targets for this sentence
-    predictions, targets = model(torch.FloatTensor(sents), sent_l)
-    # reverse the sorting
-    predictions = predictions[np.argsort(sort_idx)]
-    targets = targets[np.argsort(sort_idx)]
-    sent_l = sent_l[np.argsort(sort_idx)]
+    predictions, targets = model(torch.FloatTensor(sent), l)
+
     # convert the predictions to surprisal (negative log softmax)
     surprisal = -torch.log_softmax(predictions, dim = 2).squeeze()
     # extract only the surpisal ratings for the target words
-    surprisal = [[float(surprisal[x_index][y_index, t]) for y_index, t in enumerate(targ)] for x_index, targ in enumerate(targets) ]
-    # now remove any padding applied by word_2_index and remove end of sentence prediction
-    surprisal = [s[:l -2] for s, l in zip(surprisal, sent_l)] 
-    l = loss(predictions.view(-1, predictions.size(-1)), targets.view(-1)).data  
-    return(surprisal, targets, l)
+    surprisal = surprisal.gather(-1, targets.unsqueeze(-1))
+
+    # finally remove any padding applied by word_2_index and remove end of 
+    # sentence prediction
+    surprisal= np.array(surprisal.data.numpy())
+    surprisal = [s[:l - 2] for s, l in zip(surprisal, l)] 
+
+    return(surprisal, targets)
 
 # set contractions (words with ' in it) and words followed by a comma to nan as
 # they were excluded in the original experiment. e.g. "would n't" and "did ," are two separate 
@@ -103,12 +93,12 @@ def clean_surprisal(surprisal, targets):
     return surprisal
 
 # config settings for the models;
-transformer_config = {'embed': {'num_embeddings': dict_size,
+transformer_config = {'embed': {'n_embeddings': dict_size,
                                 'embedding_dim': 400, 'sparse': False, 
                                 'padding_idx':0
                                 }, 
-                      'tf':{'input_size':400, 'fc_size': 1024,'n_layers': 1,
-                            'h': 8, 'max_len': 41
+                      'tf':{'in_size': 400, 'fc_size': 1024,'n_layers': 1,
+                            'heads': 8, 'max_len': 41
                             },
                       'cuda': False
                       }
@@ -116,39 +106,44 @@ transformer_config = {'embed': {'num_embeddings': dict_size,
 #               'rnn':{'input_size': 400, 'hidden_size': 500, 'num_layers': 1, 'batch_first': True,
 #               'bidirectional': False, 'dropout': 0}, 'lin1':{'input_size': 500, 'output_size': 400}, 'lin2':{'input_size': 400}}
 
-gru_config = {'embed':{'num_embeddings': dict_size, 'embedding_dim': 400, 
+gru_config = {'embed':{'n_embeddings': dict_size, 'embedding_dim': 400, 
                        'sparse': False, 'padding_idx': 0
                        }, 
                       'max_len': 41,
-                      'rnn':{'input_size': 400, 'hidden_size': 500, 
-                             'num_layers': 1, 'batch_first': True,
+                      'rnn':{'in_size': 400, 'hidden_size': 500, 
+                             'n_layers': 1, 'batch_first': True,
                              'bidirectional': False, 'dropout': 0
                              }, 
-                      'lin':{'output_size': 400
+                      'lin':{'hidden_size': 400
                              }, 
-                      'att': {'hidden_size': 128, 'heads': 1
-                              }
+                      'att': {'in_size': 500, 'hidden_size': 128, 'heads': 1
+                              },
+                      'cuda': False
               }
 
-
-# set the crossentropy loss function
-loss = torch.nn.CrossEntropyLoss(ignore_index = 0)
 # create the models
-transformer_model = nwp_transformer_simple(transformer_config)
-gru_model = nwp_rnn_att(gru_config)
+simple_transformer = nwp_transformer_simple(transformer_config)
+transformer = nwp_transformer(transformer_config)
+
+simple_gru = nwp_rnn_encoder(gru_config)
+gru_att = nwp_rnn_att(gru_config)
+gru_tf_att = nwp_rnn_tf_att(gru_config)
+
+encoder_models = [simple_transformer, transformer, simple_gru, gru_att, gru_tf_att]
 ###############################################################################
 data = pd.DataFrame()
-# variable to store all the loss values (i.e. language model performance)
-loss_vals = []
+
 for model_loc in model_list:
     # load the pretrained model
     model = torch.load(model_loc, map_location = 'cpu')
-    if 'gru' in model_loc:
-        nwp_model = gru_model
-    else:
-        nwp_model = transformer_model
-    # load the pretrained weights in the model
-    nwp_model.load_state_dict(model)
+    print(model_loc)
+    for i, enc in enumerate(encoder_models):
+        nwp_model = enc
+        try:
+            nwp_model.load_state_dict(model)
+            break
+        except:
+            continue
     # set requires grad to false for faster encoding
     for param in nwp_model.parameters():
         param.requires_grad = False
@@ -161,7 +156,7 @@ for model_loc in model_list:
     for x, y in index_dict.items():
         word_dict[y] = x
     # get all the surprisal values and the target sequence (inputs shifted to the left)
-    surprisal, targets, l = calc_surprisal(data_loc, nwp_model, loss)
+    surprisal, targets = calc_surprisal(data_loc, nwp_model)
     
     # convert the target indices back to words
     targets = index_2_word(nwp_dict, targets)
@@ -169,9 +164,9 @@ for model_loc in model_list:
     surprisal = clean_surprisal(surprisal, targets)
     # create a unique name for the current surprisal values by combining the model number
     # with the nr of training samples of the model
-    surp_name = model_loc.split('/')[-2] + '_' + model_loc.split('/')[-1].split('.')[-1]
+    surp_name = model_loc.split('/')[-3] + '_' + model_loc.split('/')[-1].split('.')[-1]
     surprisal.columns = ['sent_nr', 'word_pos', surp_name ]
-    loss_vals.append([l.numpy(), surp_name])
+
     item_nr = []
     for x, y in zip(surprisal.sent_nr, surprisal.word_pos):    
         x = x*100
@@ -181,6 +176,7 @@ for model_loc in model_list:
         data[surp_name] = data.join(surprisal[[surp_name, 'item']].set_index('item'), on = 'item')[surp_name]
     else:
         data = surprisal
+
 ###############################################################################
 # now sort the column names in in loading state_dict for nwp_transformer:
 col_names = data.columns.tolist()
@@ -193,8 +189,4 @@ data[models] = data[models].round(4)
 data.sent_nr = data.sent_nr.astype(int)
 data.word_pos = data.word_pos.astype(int)
 
-data.to_csv(path_or_buf = '/home/danny/Documents/databases/next_word_prediction/data/surprisal_test.csv')
-loss_vals = pd.DataFrame(loss_vals)
-loss_vals.columns = ['loss', 'model_name']
-loss_vals.loss = loss_vals.loss.astype(float)
-loss_vals.to_csv(path_or_buf = '/home/danny/Documents/databases/next_word_prediction/data/lm_accuracy.csv')
+data.to_csv(path_or_buf = '/home/danny/Documents/databases/next_word_prediction/surprisal_data/surprisal_att.csv')

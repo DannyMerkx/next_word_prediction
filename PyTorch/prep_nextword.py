@@ -9,50 +9,59 @@ from collections import defaultdict
 import pickle
 import os 
 import csv
-# prepare the dictionary and data for the next word prediction task
+
+# location of the training database
+train_loc = '/home/danny/Documents/databases/next_word_prediction/data/train.txt'
+# this script saves 3 files, training data with <s> and </s> tokens, training
+# data converted to embedding indices, and the dictionary mapping tokens to 
+# embedding indices.
+preproc_train_loc = os.path.join('/home/danny/Documents/databases/next_word_prediction/data',
+                                 'train_preproc.txt')
+idx_train_loc = os.path.join('/home/danny/Documents/databases/next_word_prediction/data', 
+                             'train_indices.csv')
+emb_dict_loc = os.path.join('/home/danny/Documents/databases/next_word_prediction/data', 
+                            'train_indices')
+# function to save pickled data
+def save_obj(obj, loc):
+    with open(f'{loc}.pkl', 'wb') as f:
+        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL) 
 
 # open the file with the training data
-text = []
-with open('/home/danny/Documents/databases/next_word_prediction/data/train.txt') as file:
+sentences = []
+with open(train_loc) as file:
     for line in file:
-        text.append(line)
+        sentences.append(line)
 
 # create the dictionary which will contain the embedding indices   
-def_dict = defaultdict(int)
-lens = []
+emb_dict = defaultdict(int)
 count = 1
-emb_indices = []
-for x in range(len(text)):
-    # split the sentence and add beginning and ending of sentence tokens
-    sent = text[x].split()
-    sent.append('</s>')
-    sent.insert(0,'<s>')
-    lens.append(len(sent))
-    for y in sent:
-        if def_dict[y] == 0:
-            def_dict[y] = count
+text_as_indices = []
+for idx, sent in enumerate(sentences):
+    # split the sentence and add beginning and end of sentence tokens
+    words = sent.split()
+    words.append('</s>')
+    words.insert(0,'<s>')
+    for w in words:
+        if emb_dict[w] == 0:
+            emb_dict[w] = count
             count += 1
     # join the sentence back together with the two new tokens
-    text[x] = ' '.join(sent)
-    emb_indices += [[def_dict[x] for x in sent]]
+    sentences[idx] = ' '.join(words)
+    # convert the text to embedding indices (potentially saves some time during 
+    # network training)
+    text_as_indices += [[emb_dict[x] for x in words]]
     
 # save the processed text data 
-with open('/home/danny/Documents/databases/next_word_prediction/data/train_preproc.txt', 'w') as file:
-    for line in text:
+with open(preproc_train_loc, mode = 'w') as file:
+    for line in sentences:
         file.write(line + '\n')
+        
 # also save the text as converted to the indices 
-with open('/home/danny/Documents/databases/next_word_prediction/data/train_indices.csv', mode='w') as file:
+with open(idx_train_loc, mode='w') as file:
     writer = csv.writer(file, delimiter=',')
-    for line in emb_indices:
+    for line in text_as_indices:
         writer.writerow(line)
 
-def save_obj(obj, loc):
-    with open(loc + '.pkl', 'wb') as f:
-        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL) 
 ## save the dictionary
-save_obj(def_dict, os.path.join('/home/danny/Documents/databases/next_word_prediction/data', 'train_indices'))
+save_obj(emb_dict, emb_dict_loc)
 
-lens.sort()
-# print the lenght of the max len sentence. Setting this correctly during training
-# can save on computation time. 
-print(lens[-1])

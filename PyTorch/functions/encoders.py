@@ -2,211 +2,269 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Mar 26 17:54:07 2018
-
+This script contains several encoder architectures usable for the next
+word prediction task. 
 @author: danny
 """
 
-from costum_layers import multi_attention, transformer_encoder, transformer_decoder, transformer_att
+from costum_layers import (multi_attention, transformer_encoder, 
+transformer_att, transformer)
 from load_embeddings import load_word_embeddings
-from transformer import transformer
 
-import torch
 import torch.nn as nn
 
 ################################### transformer architectures #########################################
+# the nwp task requires only the encoder side of the transformer architecture
+# I made costum forward functions for the transformer that allow for training
+# in an encoder-decoder setup, beam-search prediction setup, and training
+# in and encoder-only setup. 
 
-# transformer used for next word prediction. Uses only the encoder part of the original transformer. 
+# transformer used for next word prediction ending in the same double 
+# linear prediction layer as the rnn's in Aurnhammer et al.
+class nwp_transformer_2lin(transformer):
+    def __init__(self, config):
+        super(nwp_transformer_2lin, self).__init__()
+        embed = config['embed']
+        tf= config['tf']
+
+        self.is_cuda = config['cuda']
+        self.max_len = tf['max_len']
+
+        self.embed = nn.Embedding(num_embeddings = embed['n_embeddings'], 
+                                  embedding_dim = embed['embedding_dim'], 
+                                  sparse = embed['sparse'],
+                                  padding_idx = embed['padding_idx'])
+        # prepares the positional embeddings
+        self.pos_emb = self.pos_embedding(tf['max_len'],embed['embedding_dim'])
+
+        self.TF_enc = transformer_encoder(in_size = tf['in_size'], 
+                                          fc_size = tf['fc_size'], 
+                                          n_layers = tf['n_layers'], 
+                                          h = tf['heads'])
+
+        self.linear = nn.Sequential(nn.Linear(tf['in_size'], 
+                                              tf['in_size']
+                                              ), 
+                                    nn.Tanh(), 
+                                    nn.Linear(tf['in_size'], 
+                                              embed['n_embeddings']
+                                              )
+                                    )
+
+    # l is included as a dummy to keep all code compatible with both 
+    # Transformers and RNNs (required for pack_padded_sequence)
+    def forward(self, input, l = False):
+
+        out, targs = self.encoder_only(input)
+        
+        return out, targs
+
+# Vannilla next word prediction transformer 
 class nwp_transformer(transformer):
     def __init__(self, config):
         super(nwp_transformer, self).__init__()
+        
         embed = config['embed']
         tf= config['tf']
-        # makes sure variables are mapped to the gpu if needed
+
         self.is_cuda = config['cuda']
         self.max_len = tf['max_len']
-        # create the embedding layer
-        self.embed = nn.Embedding(num_embeddings = embed['num_embeddings'], 
-                                  embedding_dim = embed['embedding_dim'], sparse = embed['sparse'],
-                                  padding_idx = embed['padding_idx'])
-        # create the positional embeddings
-        self.pos_emb = self.pos_embedding(tf['max_len'],embed['embedding_dim'])
-        # create the (stacked) transformer
-        self.TF_enc = transformer_encoder(in_size = tf['input_size'], fc_size = tf['fc_size'], 
-                              n_layers = tf['n_layers'], h = tf['h'])
-        # linear layer maps to the output dictionary
-        self.linear = nn.Sequential(nn.Linear(tf['input_size'], tf['input_size']), nn.Tanh(), 
-                                    nn.Linear(tf['input_size'], embed['num_embeddings']))
 
-    # l is included as a dummy to keep all code compatible with both Transformers and RNNs (which need the length of the unpadded sentences)
-    def forward(self, input, l = False):
-        # encode the sentence using the transformer. encoder_only uses the encoder part only but
-        # with a decoder mask (which prevents peeking at future timesteps)
-        out, targs = self.encoder_only(input)
-        return out, targs
-
-# transformer used for next word prediction. Uses only the encoder part of the original transformer. 
-class nwp_transformer_simple(transformer):
-    def __init__(self, config):
-        super(nwp_transformer, self).__init__()
-        embed = config['embed']
-        tf= config['tf']
-        # makes sure variables are mapped to the gpu if needed
-        self.is_cuda = config['cuda']
-        self.max_len = tf['max_len']
-        # create the embedding layer
-        self.embed = nn.Embedding(num_embeddings = embed['num_embeddings'], 
-                                  embedding_dim = embed['embedding_dim'], sparse = embed['sparse'],
+        self.embed = nn.Embedding(num_embeddings = embed['n_embeddings'], 
+                                  embedding_dim = embed['embedding_dim'], 
+                                  sparse = embed['sparse'],
                                   padding_idx = embed['padding_idx'])
-        # create the positional embeddings
-        self.pos_emb = self.pos_embedding(tf['max_len'],embed['embedding_dim'])
-        # create the (stacked) transformer
-        self.TF_enc = transformer_encoder(in_size = tf['input_size'], fc_size = tf['fc_size'], 
-                              n_layers = tf['n_layers'], h = tf['h'])
-        # linear layer maps to the output dictionary
-        self.linear = nn.Linear(tf['input_size'], embed['num_embeddings'])
-    # l is included as a dummy to keep all code compatible with both Transformers and RNNs (which need the length of the unpadded sentences)
+        # prepares the positional embeddings
+        self.pos_emb = self.pos_embedding(tf['max_len'], embed['embedding_dim'])
+
+        self.TF_enc = transformer_encoder(in_size = tf['in_size'], 
+                                          fc_size = tf['fc_size'], 
+                                          n_layers = tf['n_layers'], 
+                                          h = tf['heads'])
+
+        self.linear = nn.Linear(tf['in_size'], embed['n_embeddings'])
+        
+    # encoder_only packs all the transformer actions together for an 
+    # encoder-only setup
     def forward(self, input, l = False):
-        # encode the sentence using the transformer. encoder_only uses the encoder part only but
-        # with a decoder mask (which prevents peeking at future timesteps)
+
         out, targs = self.encoder_only(input)
+        
         return out, targs
 
 ########################################################################################################
 
-# RNN used for next word prediction with attention in between the RNN and linear classification layer
+# RNN used for next word prediction with attention in between the RNN and 
+# linear classification layer. Uses vectorial perceptron self attention
 class nwp_rnn_att(nn.Module):
     def __init__(self, config):
-        super(nwp_rnn_encoder, self).__init__()
-        embed = config['embed']
-        rnn = config['rnn']
-        lin_1 = config['lin1']
-        lin_2 = config['lin2']
-        att = config ['att']
-
-        self.max_len = config['max_len']
-        self.embed = nn.Embedding(num_embeddings = embed['num_embeddings'], 
-                                  embedding_dim = embed['embedding_dim'], sparse = embed['sparse'],
-                                  padding_idx = embed['padding_idx'])
-
-        self.RNN = nn.GRU(input_size = rnn['input_size'], hidden_size = rnn['hidden_size'], 
-                          num_layers = rnn['num_layers'], batch_first = rnn['batch_first'],
-                          bidirectional = rnn['bidirectional'], dropout = rnn['dropout'])
-
-        self.att = multi_attention(in_size = rnn['hidden_size'], hidden_size = att['hidden_size'], n_heads = att['heads'])
+        super(nwp_rnn_att, self).__init__()
         
-        self.linear = nn.Sequential(nn.Linear(rnn['hidden_size'], lin['output_size']), nn.Tanh(), nn.Linear(lin['output_size'],
-                                    embed['num_embeddings']))
-
-    def forward(self, input, sent_lens):
-	# create the targets by shifting the input left
-        targs = torch.nn.functional.pad(input[:,1:], [0,1]).long()
-
-        embeddings = self.embed(input.long())
-        # create a packed_sequence object. The padding will be excluded from the update step
-        # thereby training on the original sequence length only
-        x = torch.nn.utils.rnn.pack_padded_sequence(embeddings, sent_lens, batch_first = True)
-
-        x, hx = self.RNN(x)
-        # unpack again as at the moment only rnn layers except packed_sequence objects
-        x, lens = nn.utils.rnn.pad_packed_sequence(x, batch_first = True)
-	# use the linear layers to map to the output dictionary
-        x = self.linear(self.att(x))  
-        return x, targs
-    
-    def load_embeddings(self, dict_loc, embedding_loc):
-        # optionally load pretrained word embeddings. takes the dictionary of words occuring in the training data
-        # and the location of the embeddings.
-        load_word_embeddings(dict_loc, embedding_loc, self.embed.weight.data)     
-
-# RNN encoder with transformer like self attention in between the RNN layer and the linear classification layer. 
-class nwp_rnn_tf_att(nn.Module):
-    def __init__(self, config):
-        super(nwp_rnn_encoder, self).__init__()
         embed = config['embed']
         rnn = config['rnn']
-        lin_1 = config['lin1']
-        lin_2 = config['lin2']
+        lin = config['lin']
         att = config ['att']
 
         self.max_len = config['max_len']
-        self.embed = nn.Embedding(num_embeddings = embed['num_embeddings'], 
-                                  embedding_dim = embed['embedding_dim'], sparse = embed['sparse'],
+        self.embed = nn.Embedding(num_embeddings = embed['n_embeddings'], 
+                                  embedding_dim = embed['embedding_dim'], 
+                                  sparse = embed['sparse'],
                                   padding_idx = embed['padding_idx'])
 
-        self.RNN = nn.GRU(input_size = rnn['input_size'], hidden_size = rnn['hidden_size'], 
-                          num_layers = rnn['num_layers'], batch_first = rnn['batch_first'],
-                          bidirectional = rnn['bidirectional'], dropout = rnn['dropout'])
+        self.RNN = nn.GRU(input_size = rnn['in_size'], 
+                          hidden_size = rnn['hidden_size'], 
+                          num_layers = rnn['n_layers'], 
+                          batch_first = rnn['batch_first'],
+                          bidirectional = rnn['bidirectional'], 
+                          dropout = rnn['dropout'])
 
-        self.att = transformer_att(in_size = att['in_size'], h = att['heads'])
-
-        self.linear = nn.Sequential(nn.Linear(rnn['hidden_size'], lin['output_size']), nn.Tanh(), nn.Linear(lin['output_size'],
-                                    embed['num_embeddings']))
+        self.att = multi_attention(in_size = att['in_size'], 
+                                   hidden_size = att['hidden_size'], 
+                                   n_heads = att['heads'])
+        
+        self.linear = nn.Sequential(nn.Linear(rnn['hidden_size'], 
+                                              lin['hidden_size']
+                                              ), 
+                                    nn.Tanh(), 
+                                    nn.Linear(lin['hidden_size'],
+                                              embed['n_embeddings']
+                                              )
+                                    )
 
     def forward(self, input, sent_lens):
-	# create the targets by shifting the input left
-        targs = torch.nn.functional.pad(input[:,1:], [0,1]).long()
+        # create the targets by shifting the input left
+        targs = nn.functional.pad(input[:,1:], [0,1]).long()
 
         embeddings = self.embed(input.long())
-        # create a packed_sequence object. The padding will be excluded from the update step
-        # thereby training on the original sequence length only
-        x = torch.nn.utils.rnn.pack_padded_sequence(embeddings, sent_lens, batch_first = True)
 
+        x = nn.utils.rnn.pack_padded_sequence(embeddings, sent_lens, 
+                                              batch_first = True, 
+                                              enforce_sorted = False)
         x, hx = self.RNN(x)
-        # unpack again as at the moment only rnn layers except packed_sequence objects
         x, lens = nn.utils.rnn.pad_packed_sequence(x, batch_first = True)
-        x = self.att(x)
-	# use the linear layers to map to the output dictionary
-        x = self.linear(self.att(x))  
-        return x, targs
+        
+        out = self.linear(self.att(x))
+        
+        return out, targs
     
     def load_embeddings(self, dict_loc, embedding_loc):
-        # optionally load pretrained word embeddings. takes the dictionary of words occuring in the training data
-        # and the location of the embeddings.
+        # optionally load pretrained word embeddings. takes the dictionary of 
+        # words in the training data and the location of the embeddings
         load_word_embeddings(dict_loc, embedding_loc, self.embed.weight.data)     
 
+# RNN encoder with transformer like self attention in between the RNN layer 
+# and the linear classification layer. 
+class nwp_rnn_tf_att(transformer):
+    def __init__(self, config):
+        super(nwp_rnn_tf_att, self).__init__()
+        
+        embed = config['embed']
+        rnn = config['rnn']
+        lin = config['lin']
+        att = config['att']
+        # is_cuda is required for the tranformer attention to create a mask of
+        # the proper datatype
+        self.is_cuda = config['cuda']
+        self.max_len = config['max_len']
+        
+        self.embed = nn.Embedding(num_embeddings = embed['n_embeddings'], 
+                                  embedding_dim = embed['embedding_dim'], 
+                                  sparse = embed['sparse'],
+                                  padding_idx = embed['padding_idx'])
 
-# Vanilla RNN used for next word prediction
+        self.RNN = nn.GRU(input_size = rnn['in_size'], 
+                          hidden_size = rnn['hidden_size'], 
+                          num_layers = rnn['n_layers'], 
+                          batch_first = rnn['batch_first'],
+                          bidirectional = rnn['bidirectional'], 
+                          dropout = rnn['dropout'])
+
+        self.att = transformer_att(in_size = att['in_size'], 
+                                   h = att['heads'])
+
+        self.linear = nn.Sequential(nn.Linear(rnn['hidden_size'], 
+                                              lin['hidden_size']
+                                              ), 
+                                    nn.Tanh(), 
+                                    nn.Linear(lin['hidden_size'],
+                                              embed['n_embeddings']
+                                              )
+                                    )
+
+    def forward(self, input, sent_lens):
+        # create the targets by shifting the input left
+        targs = nn.functional.pad(input[:,1:], [0,1]).long()
+        # create a mask for the attention, preventing the net from peeking
+        # at the future
+        mask = self.create_dec_mask(input)
+
+        embeddings = self.embed(input.long())
+
+        x = nn.utils.rnn.pack_padded_sequence(embeddings, sent_lens, 
+                                              batch_first = True,
+                                              enforce_sorted = False)
+        x, hx = self.RNN(x)
+        x, lens = nn.utils.rnn.pad_packed_sequence(x, batch_first = True)
+        
+        out = self.linear(self.att(q = x, k = x, v = x, mask = mask))
+        
+        return out, targs
+    
+    def load_embeddings(self, dict_loc, embedding_loc):
+        # optionally load pretrained word embeddings. takes the dictionary of 
+        # words in the training data and the location of the embeddings
+        load_word_embeddings(dict_loc, embedding_loc, self.embed.weight.data)     
+
+# Vanilla RNN used for next word prediction, no attention
 class nwp_rnn_encoder(nn.Module):
     def __init__(self, config):
         super(nwp_rnn_encoder, self).__init__()
         embed = config['embed']
         rnn = config['rnn']
-        lin_1 = config['lin1']
-        lin_2 = config['lin2']
-        att = config ['att']
+        lin = config['lin']
 
         self.max_len = config['max_len']
-        self.embed = nn.Embedding(num_embeddings = embed['num_embeddings'], 
-                                  embedding_dim = embed['embedding_dim'], sparse = embed['sparse'],
+        
+        self.embed = nn.Embedding(num_embeddings = embed['n_embeddings'], 
+                                  embedding_dim = embed['embedding_dim'], 
+                                  sparse = embed['sparse'],
                                   padding_idx = embed['padding_idx'])
 
-        self.RNN = nn.GRU(input_size = rnn['input_size'], hidden_size = rnn['hidden_size'], 
-                          num_layers = rnn['num_layers'], batch_first = rnn['batch_first'],
-                          bidirectional = rnn['bidirectional'], dropout = rnn['dropout'])
+        self.RNN = nn.GRU(input_size = rnn['in_size'], 
+                          hidden_size = rnn['hidden_size'], 
+                          num_layers = rnn['n_layers'],
+                          batch_first = rnn['batch_first'],
+                          bidirectional = rnn['bidirectional'], 
+                          dropout = rnn['dropout'])
 
-        self.linear = nn.Sequential(nn.Linear(rnn['hidden_size'], lin['output_size']), nn.Tanh(), nn.Linear(lin['output_size'],
-                                    embed['num_embeddings']))
-
+        self.linear = nn.Sequential(nn.Linear(rnn['hidden_size'], 
+                                              lin['hidden_size']
+                                              ), 
+                                    nn.Tanh(), 
+                                    nn.Linear(lin['hidden_size'],
+                                              embed['n_embeddings']
+                                              )
+                                    )
 
     def forward(self, input, sent_lens):
-	# create the targets by shifting the input left
-        targs = torch.nn.functional.pad(input[:,1:], [0,1]).long()
+        # create the targets by shifting the input left
+        targs = nn.functional.pad(input[:,1:], [0,1]).long()
 
         embeddings = self.embed(input.long())
-        # create a packed_sequence object. The padding will be excluded from the update step
-        # thereby training on the original sequence length only
-        x = torch.nn.utils.rnn.pack_padded_sequence(embeddings, sent_lens, batch_first = True)
 
+        x = nn.utils.rnn.pack_padded_sequence(embeddings, sent_lens, 
+                                              batch_first = True,
+                                              enforce_sorted = False)
         x, hx = self.RNN(x)
-        # unpack again as at the moment only rnn layers except packed_sequence objects
         x, lens = nn.utils.rnn.pad_packed_sequence(x, batch_first = True)
-	# use the linear layers to map to the output dictionary
-        x = self.linear(x)  
-        return x, targs
+
+        out = self.linear(x)  
+        
+        return out, targs
     
     def load_embeddings(self, dict_loc, embedding_loc):
-        # optionally load pretrained word embeddings. takes the dictionary of words occuring in the training data
-        # and the location of the embeddings.
-        load_word_embeddings(dict_loc, embedding_loc, self.embed.weight.data)     
+        # optionally load pretrained word embeddings. takes the dictionary of 
+        # words in the training data and the location of the embeddings
+        load_word_embeddings(dict_loc, embedding_loc, self.embed.weight.data) 
 
 
