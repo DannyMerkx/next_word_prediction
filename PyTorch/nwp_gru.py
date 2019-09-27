@@ -85,7 +85,7 @@ def load_obj(loc):
 # get the size of the dictionary and add 1 for the zero or padding embedding
 dict_size = len(load_obj(args.dict_loc)) + 1 
 # config settings for the RNN
-config = {'embed':{'num_embeddings': dict_size, 'embedding_dim': 400, 
+config = {'embed':{'n_embeddings': dict_size, 'embedding_dim': 400, 
                    'sparse': False, 'padding_idx': 0
                    }, 
           'max_len': 41,
