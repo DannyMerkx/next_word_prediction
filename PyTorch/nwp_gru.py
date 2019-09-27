@@ -89,7 +89,7 @@ config = {'embed':{'n_embeddings': dict_size, 'embedding_dim': 400,
                    'sparse': False, 'padding_idx': 0
                    }, 
           'max_len': 41,
-          'rnn':{'input_size': 400, 'hidden_size': 500, 'num_layers': 1, 
+          'rnn':{'in_size': 400, 'hidden_size': 500, 'num_layers': 1, 
                  'batch_first': True, 'bidirectional': False, 'dropout': 0
                  }, 
           'lin':{'output_size': 400}, 
