@@ -55,7 +55,7 @@ class nwp_transformer_2lin(transformer):
     # Transformers and RNNs (required for pack_padded_sequence)
     def forward(self, input, l = False):
 
-        out, targs = self.encoder_only(input)
+        out, targs = self.encoder_train(input)
         
         return out, targs
 
@@ -88,7 +88,7 @@ class nwp_transformer(transformer):
     # encoder-only setup
     def forward(self, input, l = False):
 
-        out, targs = self.encoder_only(input)
+        out, targs = self.encoder_train(input)
         
         return out, targs
 
