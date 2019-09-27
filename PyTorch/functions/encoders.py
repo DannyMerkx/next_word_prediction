@@ -40,7 +40,7 @@ class nwp_transformer_2lin(transformer):
         self.TF_enc = transformer_encoder(in_size = tf['in_size'], 
                                           fc_size = tf['fc_size'], 
                                           n_layers = tf['n_layers'], 
-                                          h = tf['heads'])
+                                          h = tf['h'])
 
         self.linear = nn.Sequential(nn.Linear(tf['in_size'], 
                                               tf['in_size']
@@ -80,7 +80,7 @@ class nwp_transformer(transformer):
         self.TF_enc = transformer_encoder(in_size = tf['in_size'], 
                                           fc_size = tf['fc_size'], 
                                           n_layers = tf['n_layers'], 
-                                          h = tf['heads'])
+                                          h = tf['h'])
 
         self.linear = nn.Linear(tf['in_size'], embed['n_embeddings'])
         
@@ -120,7 +120,7 @@ class nwp_rnn_att(nn.Module):
 
         self.att = multi_attention(in_size = att['in_size'], 
                                    hidden_size = att['hidden_size'], 
-                                   n_heads = att['heads'])
+                                   n_heads = att['h'])
         
         self.linear = nn.Sequential(nn.Linear(rnn['hidden_size'], 
                                               lin['hidden_size']
