@@ -47,7 +47,7 @@ parser.add_argument('-cuda', type = bool, default = True,
                     help = 'use cuda (gpu), default: True')
 parser.add_argument('-save_states', type = list, 
                     default = [1000, 3000, 10000, 30000, 100000, 300000, 
-                               1000000, 3000000, 6470000], 
+                               1000000, 3000000, 5855670], 
                     help = '#sentences after which model parameters are saved')
 
 parser.add_argument('-gradient_clipping', type = bool, default = False,
@@ -90,7 +90,7 @@ config = {'embed': {'n_embeddings': dict_size,'embedding_dim': 400,
                     'sparse': False, 'padding_idx':0
                     }, 
           'tf':{'in_size':400, 'fc_size': 1024,'n_layers': 1,'h': 8, 
-                'max_len': 41
+                'max_len': 52
                 },  
           'cuda': cuda
           }
@@ -119,8 +119,8 @@ nwp_model = nwp_transformer(config)
 for p in nwp_model.parameters():
     if p.dim() > 1:
         torch.nn.init.xavier_uniform_(p)
-#    if p.dim() <=1:
-#        torch.nn.init.normal_(p)
+    elif p.dim() <=1:
+        torch.nn.init.normal_(p)
 
 model_parameters = filter(lambda p: p.requires_grad, nwp_model.parameters())
 print(f'#model parameters: {sum([np.prod(p.size()) for p in model_parameters])}')
@@ -164,18 +164,15 @@ while trainer.epoch <= args.n_epochs:
     # increase epoch#
     trainer.update_epoch()
     # reset the model for the next epoch
-    nwp_model = nwp_transformer(config)
     for p in nwp_model.parameters():
         if p.dim() > 1:
             torch.nn.init.xavier_uniform_(p)
-#        if p.dim() <=1:
-#            torch.nn.init.normal_(p)
-    optimizer = torch.optim.SGD(nwp_model.parameters(), lr = args.lr)
+        elif p.dim() <=1:
+            torch.nn.init.normal_(p)
+    optimizer = torch.optim.SGD(nwp_model.parameters(), lr = args.lr, momentum = .9)
     step_scheduler = lr_scheduler.StepLR(optimizer, step_size, gamma=0.5, 
                                          last_epoch = -1)
-    trainer.set_encoder(nwp_model)
-    if cuda:
-        trainer.set_cuda()
+
     trainer.set_optimizer(optimizer)
     trainer.set_lr_scheduler(step_scheduler, 'cyclic')
 

@@ -8,7 +8,6 @@ Run once to prepare the database
 from collections import defaultdict
 import pickle
 import os 
-import csv
 
 # location of the training database
 train_loc = '/home/danny/Documents/databases/next_word_prediction/data/train.txt'
@@ -18,7 +17,7 @@ train_loc = '/home/danny/Documents/databases/next_word_prediction/data/train.txt
 preproc_train_loc = os.path.join('/home/danny/Documents/databases/next_word_prediction/data',
                                  'train_preproc.txt')
 idx_train_loc = os.path.join('/home/danny/Documents/databases/next_word_prediction/data', 
-                             'train_indices.csv')
+                             'train_indices')
 emb_dict_loc = os.path.join('/home/danny/Documents/databases/next_word_prediction/data', 
                             'train_indices')
 # function to save pickled data
@@ -56,12 +55,7 @@ with open(preproc_train_loc, mode = 'w') as file:
     for line in sentences:
         file.write(line + '\n')
         
-# also save the text as converted to the indices 
-with open(idx_train_loc, mode='w') as file:
-    writer = csv.writer(file, delimiter=',')
-    for line in text_as_indices:
-        writer.writerow(line)
+save_obj(text_as_indices, idx_train_loc)
 
 ## save the dictionary
 save_obj(emb_dict, emb_dict_loc)
-
