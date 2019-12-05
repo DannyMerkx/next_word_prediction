@@ -7,14 +7,14 @@ Created on Mon Nov 26 14:49:30 2018
 """
 from mini_batcher import token_batcher, index_batcher
 from grad_tracker import gradient_clipping
-from torch.autograd import Variable
 
-import string
 import torch
 import os
 import time
-import pickle
 import numpy as np 
+import logging
+
+log = logging.getLogger(__name__)
 
 # trainer for the flickr database. 
 class nwp_trainer():
@@ -28,11 +28,12 @@ class nwp_trainer():
         self.grad_clipping = False
         # set the attention loss to empty by default
         self.att_loss = False
-        # keep track of an iteration for lr scheduling
-        self.iteration = 0
+        # keep track of the batches processed
+        self.batches = 0
         # keep track of the number of training epochs
         self.epoch = 1
-        
+        # default model id. model id is used to name saved parameters
+        self.model_id = 1
     # the possible minibatcher for all different types of data for the databases (tokens and chars)
     def index_batcher(self, sents, batch_size, max_len, shuffle):
         return index_batcher(sents, batch_size, max_len, shuffle)
@@ -47,6 +48,7 @@ class nwp_trainer():
     # function to set the learning rate scheduler and type (for deciding when to update the schedule etc.)
     def set_lr_scheduler(self, scheduler, s_type):
         self.lr_scheduler = scheduler  
+        log.info(self.lr_scheduler)
         self.scheduler = s_type
     # function to set the loss for training. Loss is not necessary e.g. when you 
     # only want to test a pretrained model.
@@ -55,6 +57,7 @@ class nwp_trainer():
     # set an optimizer. Optional like the loss in case of using just pretrained models.
     def set_optimizer(self, optim):
         self.optimizer = optim
+        log.info(self.optimizer)
     # set a dictionary. for models trained on tokens
     def set_dict_loc(self, loc):
         self.dict_loc = loc
@@ -68,9 +71,12 @@ class nwp_trainer():
         self.epoch = epoch
     def update_epoch(self):
         self.epoch += 1
-    # functions to set new embedders
+    # function to set new encoder
     def set_encoder(self, emb):
         self.encoder = emb
+    # function to set model id
+    def set_model_id(self, model_id):
+        self.model_id = model_id
     # functions to load a pretrained embedder
     def load_encoder(self, loc):
         enc_state = torch.load(loc)
@@ -86,19 +92,18 @@ class nwp_trainer():
 # outputs predictions (next word probabilities for each position) and targets for the loss function
 # (the decoder input shifted to the left)
     def train_epoch(self, sents, batch_size, save_states, save_loc):
-        print('training epoch: ' + str(self.epoch))
+        log.info('training epoch: %s', self.epoch)
         # keep track of runtime
         self.start_time = time.time()
         self.encoder.train()
         # for keeping track of the average loss over all batches
         self.train_loss = 0
-        num_batches = 0
         st = 0
         for batch in self.batcher(sents, batch_size, 
                                   self.encoder.max_len, shuffle = True):
             # retrieve a minibatch from the batcher
             enc_input, lengths = batch
-            num_batches +=1
+            self.batches +=1
             # embed the images and audio using the network
             preds, targs = self.encode(enc_input, lengths)
             # calculate the loss            
@@ -114,10 +119,15 @@ class nwp_trainer():
             self.optimizer.step()
             # add loss to average
             self.train_loss += loss.data
-            # print loss every n batches
-            if int(num_batches * batch_size) == save_states[st]:
-                print(' '.join(['loss after', str(num_batches * batch_size), 'sentences:', str(self.train_loss.cpu().data.numpy()/num_batches)]))
-                self.save_params(save_loc, int(num_batches * batch_size))
+            # save the parameters at set points in the training schedule
+            if int(self.batches * batch_size) == save_states[st]:
+                log.info('Loss after %r sentences: %r\nTraining time: %r', 
+                         self.batches * batch_size, 
+                         self.train_loss.cpu().data.numpy() / self.batches, 
+                         time.time() - self.start_time
+                         )
+
+                self.save_params(save_loc, int(self.batches * batch_size))
                 st += 1
                 print(time.time() - self.start_time)
             # if there is a cyclic lr scheduler, take a step in the scheduler
@@ -125,7 +135,7 @@ class nwp_trainer():
                 self.lr_scheduler.step()
                 self.iteration +=1     
         # print the average loss for the current epoch
-        self.train_loss = self.train_loss.cpu().data.numpy()/num_batches
+        self.train_loss = self.train_loss.cpu().data.numpy()/self.batches
 # during testing the model takes encoder input and translates the sentence into 
 # the target language without looking at the decoder input. decoder input is therefore
 # optional. If it is passed, this is just used to create the gold label targets for calculating 
@@ -179,7 +189,14 @@ class nwp_trainer():
         print("validation loss:\t\t{:.6f}".format(self.test_loss))
     # function to save parameters in a results folder
     def save_params(self, loc, num_batches):
-        torch.save(self.encoder.state_dict(), os.path.join(loc, '_'.join(['nwp_model', str(self.epoch), str(num_batches)])))
+        torch.save(self.encoder.state_dict(), 
+                   os.path.join(loc, '_'.join(['nwp_model', 
+                                               str(self.model_id), 
+                                               str(num_batches)
+                                               ]
+                                              )
+                                )
+                   )
 ############ functions to deal with the trainer's gradient clipper ############
     # create a gradient tracker/clipper
     def set_gradient_clipping(self, tf_value):

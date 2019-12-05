@@ -12,7 +12,9 @@ transformer_att, transformer)
 from load_embeddings import load_word_embeddings
 
 import torch.nn as nn
+import logging
 
+log = logging.getLogger(__name__)
 ################################### transformer architectures #########################################
 # the nwp task requires only the encoder side of the transformer architecture
 # I made costum forward functions for the transformer that allow for training
@@ -20,9 +22,10 @@ import torch.nn as nn
 # in and encoder-only setup. 
 
 # transformer used for next word prediction ending in the same double 
-# linear prediction layer as the rnn's in Aurnhammer et al.
+# linear prediction layer as the rnn's in Aurnhammer et al. Tested this
+# just to be sure but it doesn't make any difference
 class nwp_transformer_2lin(transformer):
-    def __init__(self, config):
+    def __init__(self, config, log = True):
         super(nwp_transformer_2lin, self).__init__()
         embed = config['embed']
         tf= config['tf']
@@ -50,7 +53,9 @@ class nwp_transformer_2lin(transformer):
                                               embed['n_embeddings']
                                               )
                                     )
-
+        if log:
+            self.log(embed, tf)
+            
     # l is included as a dummy to keep all code compatible with both 
     # Transformers and RNNs (required for pack_padded_sequence)
     def forward(self, input, l = False):
@@ -59,10 +64,15 @@ class nwp_transformer_2lin(transformer):
         # apply the classification layer to the transformer output
         out = self.linear(out)        
         return out, targs
-
+    
+    def log(self, embed, tf):
+        log.info('Using the standard transformer encoder with a multi-layer classification layer')
+        log.info('Embedding layer: %s\nTransformer layer: %s', 
+                 embed, tf)
+        
 # Vannilla next word prediction transformer 
 class nwp_transformer(transformer):
-    def __init__(self, config):
+    def __init__(self, config, log = True):
         super(nwp_transformer, self).__init__()
         
         embed = config['embed']
@@ -82,9 +92,13 @@ class nwp_transformer(transformer):
                                           fc_size = tf['fc_size'], 
                                           n_layers = tf['n_layers'], 
                                           h = tf['h'])
-
+        # linear layer has no extra configurations, it just maps directly
+        # from the transformer output to the number of embeddings
         self.linear = nn.Linear(tf['in_size'], embed['n_embeddings'])
         
+        if log:
+            self.log(embed, tf)
+            
     # encoder_only packs all the transformer actions together for an 
     # encoder-only setup
     def forward(self, input, l = False):
@@ -94,12 +108,17 @@ class nwp_transformer(transformer):
         out = self.linear(out)
         return out, targs
 
+    def log(self, embed, tf):
+        log.info('Using the standard transformer encoder but with decoder (future) masking')
+        log.info('Embedding layer: %s\nTransformer layer: %s', 
+                 embed, tf)
+        
 ########################################################################################################
 
 # RNN used for next word prediction with attention in between the RNN and 
 # linear classification layer. Uses vectorial perceptron self attention
 class nwp_rnn_att(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, log = True):
         super(nwp_rnn_att, self).__init__()
         
         embed = config['embed']
@@ -132,7 +151,9 @@ class nwp_rnn_att(nn.Module):
                                               embed['n_embeddings']
                                               )
                                     )
-
+        if log:
+            self.log(embed, rnn, lin, att)
+            
     def forward(self, input, sent_lens):
         # create the targets by shifting the input left
         targs = nn.functional.pad(input[:,1:], [0,1]).long()
@@ -154,10 +175,15 @@ class nwp_rnn_att(nn.Module):
         # words in the training data and the location of the embeddings
         load_word_embeddings(dict_loc, embedding_loc, self.embed.weight.data)     
 
+    def log(self, embed, rnn, lin, att):
+        log.info('Using the rnn (GRU) encoder with vectorial self attention')
+        log.info('Embedding layer: %s\nGRU layer: %s\nLinear layer: %s\nAttention: %s', 
+                 embed, rnn, lin, att)
+
 # RNN encoder with transformer like self attention in between the RNN layer 
 # and the linear classification layer. 
 class nwp_rnn_tf_att(transformer):
-    def __init__(self, config):
+    def __init__(self, config, log = True):
         super(nwp_rnn_tf_att, self).__init__()
         
         embed = config['embed']
@@ -192,7 +218,9 @@ class nwp_rnn_tf_att(transformer):
                                               embed['n_embeddings']
                                               )
                                     )
-
+        if log:
+            self.log(embed, rnn, lin, att)
+            
     def forward(self, input, sent_lens):
         # create the targets by shifting the input left
         targs = nn.functional.pad(input[:,1:], [0,1]).long()
@@ -217,9 +245,14 @@ class nwp_rnn_tf_att(transformer):
         # words in the training data and the location of the embeddings
         load_word_embeddings(dict_loc, embedding_loc, self.embed.weight.data)     
 
+    def log(self, embed, rnn, lin, att):
+        log.info('Using the rnn (GRU) encoder with transformer like self attention')
+        log.info('Embedding layer: %s\nGRU layer: %s\nLinear layer: %s\nAttention: %s', 
+                 embed, rnn, lin, att)
+
 # Vanilla RNN used for next word prediction, no attention
 class nwp_rnn_encoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, log = True):
         super(nwp_rnn_encoder, self).__init__()
         embed = config['embed']
         rnn = config['rnn']
@@ -247,7 +280,9 @@ class nwp_rnn_encoder(nn.Module):
                                               embed['n_embeddings']
                                               )
                                     )
-
+        if log:
+            self.log(embed, rnn, lin)
+            
     def forward(self, input, sent_lens):
         # create the targets by shifting the input left
         targs = nn.functional.pad(input[:,1:], [0,1]).long()
@@ -269,4 +304,7 @@ class nwp_rnn_encoder(nn.Module):
         # words in the training data and the location of the embeddings
         load_word_embeddings(dict_loc, embedding_loc, self.embed.weight.data) 
 
-
+    def log(self, embed, rnn, lin):
+        log.info('Using the standard rnn (GRU) encoder')
+        log.info('Embedding layer: %s\nGRU layer: %s\nLinear layer: %s', 
+                 embed, rnn, lin)
