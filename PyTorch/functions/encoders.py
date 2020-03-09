@@ -48,7 +48,7 @@ class nwp_transformer_2lin(transformer):
         self.linear = nn.Sequential(nn.Linear(tf['in_size'], 
                                               tf['in_size']
                                               ), 
-                                    nn.Tanh(), 
+                                    nn.ReLU(), 
                                     nn.Linear(tf['in_size'], 
                                               embed['n_embeddings']
                                               )
@@ -66,9 +66,8 @@ class nwp_transformer_2lin(transformer):
         return out, targs
     
     def log(self, embed, tf):
-        log.info('Using the standard transformer encoder with a multi-layer classification layer')
-        log.info('Embedding layer: %s\nTransformer layer: %s', 
-                 embed, tf)
+        log.info(f'Using the standard transformer encoder with a multi-layer classification layer')
+        log.info(f'Embedding layer: {embed}\nTransformer layer: {tf}')
         
 # Vannilla next word prediction transformer 
 class nwp_transformer(transformer):
@@ -109,9 +108,8 @@ class nwp_transformer(transformer):
         return out, targs
 
     def log(self, embed, tf):
-        log.info('Using the standard transformer encoder but with decoder (future) masking')
-        log.info('Embedding layer: %s\nTransformer layer: %s', 
-                 embed, tf)
+        log.info(f'Using the standard transformer encoder but with decoder (future) masking')
+        log.info(f'Embedding layer: {embed}\nTransformer layer: {tf}')
         
 ########################################################################################################
 
@@ -139,14 +137,14 @@ class nwp_rnn_att(nn.Module):
                           bidirectional = rnn['bidirectional'], 
                           dropout = rnn['dropout'])
 
-        self.att = multi_attention(in_size = att['in_size'], 
+        self.att = multi_attention(in_size = rnn['hidden_size'], 
                                    hidden_size = att['hidden_size'], 
-                                   n_heads = att['h'])
+                                   n_heads = att['heads'])
         
         self.linear = nn.Sequential(nn.Linear(rnn['hidden_size'], 
                                               lin['hidden_size']
                                               ), 
-                                    nn.Tanh(), 
+                                    nn.ReLU(), 
                                     nn.Linear(lin['hidden_size'],
                                               embed['n_embeddings']
                                               )
@@ -164,8 +162,7 @@ class nwp_rnn_att(nn.Module):
                                               batch_first = True, 
                                               enforce_sorted = False)
         x, hx = self.RNN(x)
-        x, lens = nn.utils.rnn.pad_packed_sequence(x, batch_first = True)
-        
+        x, lens = nn.utils.rnn.pad_packed_sequence(x, batch_first = True)       
         out = self.linear(self.att(x))
         
         return out, targs
@@ -176,9 +173,8 @@ class nwp_rnn_att(nn.Module):
         load_word_embeddings(dict_loc, embedding_loc, self.embed.weight.data)     
 
     def log(self, embed, rnn, lin, att):
-        log.info('Using the rnn (GRU) encoder with vectorial self attention')
-        log.info('Embedding layer: %s\nGRU layer: %s\nLinear layer: %s\nAttention: %s', 
-                 embed, rnn, lin, att)
+        log.info(f'Using the rnn (GRU) encoder with vectorial self attention')
+        log.info(f'Embedding layer: {embed}\nGRU layer: {rnn}\nLinear layer: {lin}\nAttention: {att}')
 
 # RNN encoder with transformer like self attention in between the RNN layer 
 # and the linear classification layer. 
@@ -210,11 +206,8 @@ class nwp_rnn_tf_att(transformer):
         self.att = transformer_att(in_size = att['in_size'], 
                                    h = att['heads'])
 
-        self.linear = nn.Sequential(nn.Linear(rnn['hidden_size'], 
-                                              lin['hidden_size']
-                                              ), 
-                                    nn.Tanh(), 
-                                    nn.Linear(lin['hidden_size'],
+        self.linear = nn.Sequential( 
+                                    nn.Linear(rnn['hidden_size'],
                                               embed['n_embeddings']
                                               )
                                     )
@@ -246,11 +239,10 @@ class nwp_rnn_tf_att(transformer):
         load_word_embeddings(dict_loc, embedding_loc, self.embed.weight.data)     
 
     def log(self, embed, rnn, lin, att):
-        log.info('Using the rnn (GRU) encoder with transformer like self attention')
-        log.info('Embedding layer: %s\nGRU layer: %s\nLinear layer: %s\nAttention: %s', 
-                 embed, rnn, lin, att)
+        log.info(f'Using the rnn (GRU) encoder with transformer like self attention')
+        log.info(f'Embedding layer: {embed}\nGRU layer: {rnn}\nLinear layer: {lin}\nAttention: {att}')
 
-# Vanilla RNN used for next word prediction, no attention
+# Vanilla RNN used for next word gru_tf = nwp_rnn_tf_att(gru_1l)prediction, no attention
 class nwp_rnn_encoder(nn.Module):
     def __init__(self, config, log = True):
         super(nwp_rnn_encoder, self).__init__()
@@ -275,7 +267,7 @@ class nwp_rnn_encoder(nn.Module):
         self.linear = nn.Sequential(nn.Linear(rnn['hidden_size'], 
                                               lin['hidden_size']
                                               ), 
-                                    nn.Tanh(), 
+                                    nn.ReLU(), 
                                     nn.Linear(lin['hidden_size'],
                                               embed['n_embeddings']
                                               )
@@ -305,6 +297,5 @@ class nwp_rnn_encoder(nn.Module):
         load_word_embeddings(dict_loc, embedding_loc, self.embed.weight.data) 
 
     def log(self, embed, rnn, lin):
-        log.info('Using the standard rnn (GRU) encoder')
-        log.info('Embedding layer: %s\nGRU layer: %s\nLinear layer: %s', 
-                 embed, rnn, lin)
+        log.info(f'Using the standard rnn (GRU) encoder')
+        log.info(f'Embedding layer: {embed}\nGRU layer: {rnn}\nLinear layer: {lin}')

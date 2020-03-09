@@ -11,19 +11,19 @@ import pickle
 import os 
 
 # location of the training database
-train_loc = '/home/danny/Documents/databases/next_word_prediction/data/train.txt'
+train_loc = '/vol/tensusers/dmerkx/next_word_prediction/train_nwp.txt'
 # this script saves 3 files, training data with <s> and </s> tokens, the dictionary 
 # mapping tokens to embedding indices and the word log-frequency dictionary.
-preproc_train_loc = os.path.join('/home/danny/Documents/databases/next_word_prediction/data',
+preproc_train_loc = os.path.join('/vol/tensusers/dmerkx/next_word_prediction/',
                                  'train_preproc.txt')
 
-emb_dict_loc = os.path.join('/home/danny/Documents/databases/next_word_prediction/data', 
+emb_dict_loc = os.path.join('/vol/tensusers/dmerkx/next_word_prediction/', 
                             'train_indices')
-freq_dict_loc = os.path.join('/home/danny/Documents/databases/next_word_prediction/data', 
+freq_dict_loc = os.path.join('/vol/tensusers/dmerkx/next_word_prediction/', 
                             'word_freq')
 # function to save pickled data
 def save_obj(obj, loc):
-    with open(f'{loc}.pkl', 'wb') as f:
+    with open(str(loc) + '.pkl', 'wb') as f:
         pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL) 
 
 # open the file with the training data
@@ -31,7 +31,7 @@ sentences = []
 with open(train_loc) as file:
     for line in file:
         sentences.append(line)
-
+print(len(sentences))
 # create a frequency dictionary in order to create the log-frequency feature
 # for the LMER analysis.
 freq_dict = Counter(word for sent in sentences for word in sent.split())
@@ -59,8 +59,6 @@ with open(preproc_train_loc, mode = 'w') as file:
     for line in sentences:
         file.write(line + '\n')
         
-save_obj(text_as_indices, idx_train_loc)
-
 ## save the index and frequency dictionary
 save_obj(emb_dict, emb_dict_loc)
 save_obj(freq_dict, freq_dict_loc)

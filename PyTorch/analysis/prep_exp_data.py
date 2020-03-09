@@ -13,7 +13,6 @@ data where somehow the word Scott was replaced with Sott leading to an oov case.
 import pandas as pd
 import os
 import pickle
-import csv
 
 eeg = '/home/danny/Documents/databases/next_word_prediction/data/data_EEG.csv'
 et = '/home/danny/Documents/databases/next_word_prediction/data/data_ET.csv'

@@ -85,7 +85,7 @@ class multi_attention(nn.Module):
     def forward(self, input):
         out, self.alpha = [], []
         for head in self.att_heads:
-            o = head(input)
+            o = head.no_peek(input)
             out.append(o) 
             # save the attention matrices to be able to use them in a loss 
             # function
@@ -117,7 +117,7 @@ class attention(nn.Module):
         # calculate the attention weights
         self.alpha = self.out(nn.functional.tanh(self.hidden(input)))
         x = self.apply_attention(input)
-        return x   
+        return x.cuda()   
     
     def apply_attention(self, input):
         att_applied = torch.zeros(input.shape)
