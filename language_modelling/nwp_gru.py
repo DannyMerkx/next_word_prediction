@@ -19,7 +19,7 @@ import os
 import pickle
 import logging
 
-sys.path.append('./functions')
+sys.path.append('../functions')
 
 from encoders import nwp_rnn_encoder, nwp_rnn_tf_att, nwp_rnn_att
 from nwp_trainer import nwp_trainer

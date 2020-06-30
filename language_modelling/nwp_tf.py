@@ -19,7 +19,7 @@ import os
 import pickle
 import logging
 
-sys.path.append('./functions')
+sys.path.append('../functions')
 
 from encoders import nwp_transformer, nwp_transformer_2lin
 from nwp_trainer import nwp_trainer

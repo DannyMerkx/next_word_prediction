@@ -1,4 +1,3 @@
-Scripts for training the Language Models.
+Project aimed at comparing Transformers and RNNs as models of human sentence processing.
 
-There are 2 seperate scripts for training the GRUs and Transformer models. Define your LM architecture
-in these scripts or in the shell scripts through the argparser commands.
+The paper is currently under anonymous review. 
