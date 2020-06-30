@@ -47,7 +47,7 @@ parser.add_argument('-n_epochs', type = int, default = 2,
 # model ids are used for the naming of model savestates and to identify how 
 # many models the script should train. Each model will start with new weights and
 # a new random seed.
-parser.add_argument('-model_ids', type = int, default = [x for x in range(8)], 
+parser.add_argument('-model_ids', type = int, default = [x for x in range(1, 9)], 
                     help = 'list of ids for the models')
 parser.add_argument('-cuda', type = bool, default = True, 
                     help = 'use cuda (gpu), default: True')
@@ -127,19 +127,18 @@ train = load(args.data_loc, 'train_nwp.txt')
 ####################### Neural network setup ##################################
 def create_model(config, args, seeds, model_id = 1, cuda = False):
     # create the network and initialise the parameters
+    rand_seed(seeds, model_id)
     nwp_model = nwp_transformer(config)
-    # set the random seed AFTER model creation so that the initialisation of 
-    # the embedding layer can be sharde across models
     rand_seed(seeds, model_id)
     for p in nwp_model.parameters():
         if (p.dim() > 1) & (args.param == 'he'):
             torch.nn.init.kaiming_uniform_(p, nonlinearity = 'relu')
         elif (p.dim() > 1) & (args.param == 'xavier'): 
             torch.nn.init.xavier_uniform_(p)
-        elif (p.dim() <=1) & (args.bias == 'zeros'):
-            p.data.fill_(0)
-        elif (p.dim() <=1) & (args.bias == 'normal'):
-            torch.nn.init.normal_(p)
+        #elif (p.dim() <=1) & (args.bias == 'zeros'):
+        #    p.data.fill_(0)
+        #elif (p.dim() <=1) & (args.bias == 'normal'):
+        #    torch.nn.init.normal_(p)
 
     # optimiser for the network
     optimizer = torch.optim.SGD(nwp_model.parameters(), lr = args.lr, 
@@ -181,7 +180,7 @@ for model_id in args.model_ids:
     n_params = sum([np.prod(p.size()) for p in model_parameters])
     logging.info(f'Model parameters: {n_params}')
 
-    print(next(trainer.encoder.parameters()))
+    #print(next(trainer.encoder.parameters()))
 
     # run the training loop for the indicated amount of epochs 
     while trainer.epoch <= args.n_epochs:

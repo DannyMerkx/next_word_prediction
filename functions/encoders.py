@@ -267,7 +267,7 @@ class nwp_rnn_encoder(nn.Module):
         self.linear = nn.Sequential(nn.Linear(rnn['hidden_size'], 
                                               lin['hidden_size']
                                               ), 
-                                    nn.ReLU(), 
+                                    nn.Tanh(), 
                                     nn.Linear(lin['hidden_size'],
                                               embed['n_embeddings']
                                               )
