@@ -1,3 +1,3 @@
 Project aimed at comparing Transformers and RNNs as models of human sentence processing.
 
-The paper is currently under anonymous review. 
+A paper based on this project is currently under review. 
